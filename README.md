@@ -39,14 +39,11 @@ DeadEye 辅助瞄准系统是一款高性能的图像辅助瞄准工具，旨在
    - `P`: 暂停/继续程序
    - `O`: 完全结束程序
 
-### 演示视频
+### 效果演示
 
-以下视频展示了此项目可提供的辅助瞄准效果：
+以下动图展示了此项目可提供的辅助瞄准效果：
 
-<video width="320" height="240" controls>
-  <source src="./effect_test.mp4" type="video/mp4">
-  您的浏览器不支持 video 标签。
-</video>
+![辅助瞄准效果演示](./effect_test.gif)
 
 ### 注意事项
 
