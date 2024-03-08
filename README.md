@@ -1,4 +1,4 @@
-# DeadEye 辅助瞄准系统
+# DeadEye 辅助瞄准系统 / DeadEye Auto Aiming System
 
 DeadEye 辅助瞄准系统是一款高性能的图像辅助瞄准工具，旨在通过图像处理和目标追踪技术提高射击精度。该系统通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。
 
@@ -20,11 +20,45 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
 
+
 ## 技术路线
 
-请按照原有的格式继续将其他部分的中文描述翻译成英文并添加到 Markdown 文件中。
+### 截图模块 (ScreenShotHelper) / Screenshot Module (ScreenShotHelper)
 
-...
+- **自动分辨率计算**: 自动检测屏幕分辨率并调整截图尺寸适应不同大小的窗口需求。
+- **高速截图**: 采用 `dxcam` 或 `mss` 实现高速截图功能。
+
+
+### 目标检测模块 (DetectModule)
+
+- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.onnx` 模型的基于 TensorRT 的部署方式进行高效检测。
+
+### 目标追踪
+
+- **目标类 (Target)**: 基于检测结果，使用匈牙利算法进行帧间目标匹配和编号，此外使用卡尔曼滤波算法对目标位置进行预测和优化，以实现平滑的追踪效果。
+
+### 瞄准模块 (AutoAimModule)
+
+- **DeadEyeAutoAimingModule**: 基础的辅助瞄准模块类，实现了核心的瞄准功能。
+- **定制扩展**: 允许用户继承或修改基类，创建个性化的辅助瞄准模块。
+
+## Technological Path
+
+### Screenshot Module (ScreenShotHelper)
+- **Automatic Resolution Calculation**: Automatically detects screen resolution and adjusts the screenshot size to accommodate different window sizes.
+- **High-Speed Screenshots**: Uses advanced libraries like `dxcam` or `mss` to capture high-speed screenshots with minimal performance impact.
+
+### Target Detection Module (YoloDetector)
+- **Model Compatibility**: Supports direct detection using `.pt` model files, offering flexibility in model training and deployment.
+- **Efficient Detection**: Incorporates `.onnx` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
+
+### Target Tracking
+- **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
+- **Position Prediction and Optimization**: Employs Kalman filter algorithms to predict and optimize target positions, resulting in smoother tracking and better performance.
+
+### Aiming Module (DeadEyeAutoAimingModule)
+- **Core Aiming Functions**: Implements the fundamental features necessary for assisted aiming, such as target locking and trajectory adjustment.
+- **Customization and Extension**: Designed with extensibility in mind, allowing users to inherit from or modify the base class to create customized aiming modules tailored to specific requirements.
 
 ## 使用指南
 
@@ -35,9 +69,9 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
    - `P`: 暂停/继续程序
    - `O`: 完全结束程序
 
-### Usage Guide
+## Usage Guide
 
-#### Running the Program
+### Running the Program
 
 1. Run the `main.py` file to start the program.
 2. During program execution, the following shortcuts can be used:
@@ -48,13 +82,11 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 以下动图展示了此项目可提供的辅助瞄准效果：
 
-![辅助瞄准效果演示](./effect_test.gif)
-
 ### Demonstration
 
 The following animation demonstrates the aiming assist effect provided by this project:
 
-![Aiming Assist Effect Demonstration](./effect_test.gif)
+![辅助瞄准效果演示 / Aiming Assist Effect Demonstration](./effect_test.gif)
 
 ### 注意事项
 
