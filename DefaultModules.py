@@ -72,27 +72,22 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         mouseX, mouseY = pyautogui.position()
         # print('鼠标位置：', mouseX, ',', mouseY)
 
-        # print('当前共有：', len(targets), '个目标')
         for target in target_list:
             tag, left_top, right_bottom = target.label, target.left_top, target.right_bottom
             if tag != 0:
                 continue
-            # print(tag, (left_top[0] + self.view_range[0], left_top[1] + self.view_range[1]),
-            #       (right_bottom[0] + self.view_range[0], right_bottom[1] + self.view_range[1]))
             width = right_bottom[0] - left_top[0]
             height = right_bottom[1] - left_top[1]
             if left_top[0] + self.view_range[0] + 0.25 * width <= mouseX <= right_bottom[0] + self.view_range[
                 0] - 0.25 * width:
                 if left_top[1] + self.view_range[1] <= mouseY <= right_bottom[1] + self.view_range[1] - 0.75 * height:
                     # windll.user32.BlockInput(1)
-                    # self.mouse_controller.click(pynput.mouse.Button.right)
                     self.shoot()
                     break
             if left_top[0] + self.view_range[0] + 0.15 * width <= mouseX <= right_bottom[0] + self.view_range[
                 0] - 0.15 * width:
                 if left_top[1] + self.view_range[1] <= mouseY <= right_bottom[1] + self.view_range[1] - 0.5 * height:
                     # windll.user32.BlockInput(1)
-                    # self.mouse_controller.click(pynput.mouse.Button.right)
                     self.shoot()
                     self.last_auto_shoot_time = t
                     break
@@ -102,14 +97,11 @@ class DeadEyeAutoAimingModule(AutoAimModule):
     def auto_aim(self, target_list: list):
         t = time.time()
         mouseX, mouseY = pyautogui.position()
-        # print('鼠标位置：', mouseX, ',', mouseY)
 
         if not len(target_list):
             return False
-        # print('检测到', len(targets), '个目标')
         rel_mouse_x = mouseX - self.view_range[0]
         rel_mouse_y = mouseY - self.view_range[1]
-        # print('相对鼠标位置：', rel_mouse_x, rel_mouse_y)
         # 寻找最近目标的时候，最终距离减去目标长度宽度，这样可以避免小目标出现在大目标附近时，实际距离更远的小目标成为最近的目标
         nearest_target = min(target_list, key=lambda k: abs((k.left_top[0] + k.right_bottom[0]) / 2 - rel_mouse_x) +
                                                         abs((k.left_top[1] + k.right_bottom[1]) / 2 - rel_mouse_y) -
@@ -123,7 +115,6 @@ class DeadEyeAutoAimingModule(AutoAimModule):
             return False
         # print('最近目标：', nearest_target)
         # 移动到最近的目标
-
         position_fixed = (round((nearest_target.left_top[0] + nearest_target.right_bottom[0]) * 0.5),
                           round((nearest_target.left_top[1] + nearest_target.right_bottom[1]) * 0.5 - 0.25 * height))
         x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))  # 计算鼠标移动
@@ -164,7 +155,6 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         distance_y = target_position[1] - mouse_position[1]
         if distance_y * self.previous_distance_y < 0:
             self.y_integral_value = self.y_integral_value * self.rebound_strength  # 降低积分量，减少回弹
-        # self.distance_list.append(distance_x)
 
         x_r, y_r = 0, 0  # 初始化返回值
         if not only_update_info:
