@@ -7,7 +7,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## 特性
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
-- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov7 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .onnx 模型进行精确的目标检测。
+- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .onnx /.trt 模型进行精确的目标检测（目前只测试了 .pt 模型，确认可以正常使用）。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
 - **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
@@ -15,7 +15,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## Features
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
-- **Target Detection**: The YoloDetector class, inheriting from the DetectModule base class, is based on the Yolov7 target detection neural network, supporting direct detection with .pt weight files or precise target detection using .onnx models deployed with TensorRT.
+- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .onnx or .trt formats (currently, only the .pt model has been tested and confirmed to work properly).
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
@@ -31,7 +31,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 ### 目标检测模块 (DetectModule)
 
-- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.onnx` 模型的基于 TensorRT 的部署方式进行高效检测。
+- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.onnx / .trt` 模型的基于 TensorRT 的部署方式进行高效检测。
 
 ### 目标追踪
 
@@ -92,8 +92,10 @@ The following animation demonstrates the aiming assist effect provided by this p
 
 - **注1**：此项目是从之前损坏的项目代码中整合而来，尚未进行完整的重新测试。可能存在未知的错误或问题，请在使用时注意。
 - **注2**：项目仅供学习和测试用途，严禁用于游戏作弊或任何违反游戏使用规则的行为。
+- **注3**：2024.3.12，项目已修复了绝大多数错误，并且更换目标检测模块至 Yolov8 版本，使用 .pt 权重文件进行目标检测并且辅助瞄准测试无误，暂未测试 .onnx 及 .trt 权重文件的推理流程。
 
 ### Precautions
 
 - **Note 1**: This project is integrated from previously damaged project code and has not been completely retested. There may be unknown errors or issues, so please be cautious when using it.
 - **Note 2**: The project is for learning and testing purposes only, and it is strictly forbidden to use it for game cheating or any behavior that violates game usage rules.
+- **Note 3**: As of March 12, 2024, the project has fixed most of the errors and has updated the target detection module to the Yolov8 version. It now uses the .pt weight file for target detection, and the assisted aiming has been tested without issues. The inference process for .onnx and .trt weight files has not been tested yet.
