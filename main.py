@@ -4,8 +4,6 @@ from pathlib import Path
 import threading
 from pynput import keyboard
 
-yolov7_path = Path(__file__).resolve().parent / 'Yolov7'
-sys.path.append(str(yolov7_path))
 from DeadEyeCore import DeadEyeCore
 from DefaultModules import *
 
@@ -64,7 +62,7 @@ def stop_program():
 if __name__ == '__main__':
     view_range = (640, 640)
     print('Initing detect module...')
-    detect_module = YoloDetector('./weights/yolov7-tiny.pt')  # set your model file here, .pt or .onnx
+    detect_module = YoloDetector('./weights/yolov8n.pt')  # set your model file here, .pt or .onnx
     print('Initing auto aiming module...')
     auto_aiming_module = DeadEyeAutoAimingModule(view_range)
     dead_eye = DeadEyeCore(detect_module, auto_aiming_module, view_range)

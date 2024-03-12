@@ -2,38 +2,77 @@
 # cython: language_level=3
 import time
 
+import cv2
 import pyautogui
 import pydirectinput
 from pynput import mouse
 
 from BaseModules import *
 from TensorRTEngine import *
-from Yolov7Helper import *
+from ultralytics import YOLO
+
+
+class TRTPredictor(TensorRTEngine):
+    def __init__(self, engine_path):
+        super(TRTPredictor, self).__init__(engine_path)
+        self.n_classes = 80  # your model classes
 
 
 class YoloDetector(DetectModule):
     def __init__(self, weight: str):
-        super().__init__()
+        super(YoloDetector).__init__()
+        self.model = None
+        self.model_type = None
+        self.load_model(weight)
+
+    def load_model(self, weight: str):
         if '.pt' in weight:
-            detector = Yolov7Helper(weight)
+            self.model = YOLO(weight)
             self.model_type = 'pt'
         else:
-            detector = TensorRTEngine(weight)
-            self.model_type = 'onnx'
-        self.detector = detector
+            self.model = TRTPredictor(engine_path=weight)
+            self.model_type = 'trt'
 
     def target_detect(self, img) -> list:
+        if self.model is None:
+            raise RuntimeError("Model is not loaded. Please call load_model() first.")
+
+        results = []
         if self.model_type == 'pt':
-            pass
+            # h, w = img.shape[:2]
+            result = self.model(img, verbose=False, half=False, iou=0.8, conf=0.75)
+            detections = result[0]
+
+            # 提取检测结果中的边界框、类别标签和置信度
+            boxes = detections.boxes.xyxy.cpu().numpy()  # 边界框坐标
+            labels = detections.boxes.cls.cpu().numpy().astype(int)  # 类别标签
+            # scores = detections.boxes.conf.cpu().numpy()  # 置信度
+
+            # 在图像上绘制边界框
+            for box, label in zip(boxes, labels):
+                x1, y1, x2, y2 = box
+                class_name = detections.names[label]  # 获取类别名称
+                result = [class_name, (int(x1), int(y1)), (int(x2), int(y2))]
+                results.append(result)
+                # 绘制边界框
+                # cv2.rectangle(img, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+                # 绘制类别标签
+                # cv2.putText(img, class_name, (int(x1), int(y1) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
         else:
-            pass
-        return []
+            results = self.model.inference(img, conf=0.75, end2end=True)
+
+        # 显示结果图像
+        # cv2.imshow("Detection Results", img)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        return results
 
 
 class DeadEyeAutoAimingModule(AutoAimModule):
     def __init__(self, view_range):
-        super().__init__()
-        self.view_range = view_range
+        super(DeadEyeAutoAimingModule).__init__()
+        self.view_range_start = self.calculate_view_range_start_pos(view_range)
 
         # mouse controller
         self.mouse_controller = mouse.Controller()
@@ -74,19 +113,17 @@ class DeadEyeAutoAimingModule(AutoAimModule):
 
         for target in target_list:
             tag, left_top, right_bottom = target.label, target.left_top, target.right_bottom
-            if tag != 0:
-                continue
             width = right_bottom[0] - left_top[0]
             height = right_bottom[1] - left_top[1]
-            if left_top[0] + self.view_range[0] + 0.25 * width <= mouseX <= right_bottom[0] + self.view_range[
+            if left_top[0] + self.view_range_start[0] + 0.25 * width <= mouseX <= right_bottom[0] + self.view_range_start[
                 0] - 0.25 * width:
-                if left_top[1] + self.view_range[1] <= mouseY <= right_bottom[1] + self.view_range[1] - 0.75 * height:
+                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[1] - 0.75 * height:
                     # windll.user32.BlockInput(1)
                     self.shoot()
                     break
-            if left_top[0] + self.view_range[0] + 0.15 * width <= mouseX <= right_bottom[0] + self.view_range[
+            if left_top[0] + self.view_range_start[0] + 0.15 * width <= mouseX <= right_bottom[0] + self.view_range_start[
                 0] - 0.15 * width:
-                if left_top[1] + self.view_range[1] <= mouseY <= right_bottom[1] + self.view_range[1] - 0.5 * height:
+                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[1] - 0.5 * height:
                     # windll.user32.BlockInput(1)
                     self.shoot()
                     self.last_auto_shoot_time = t
@@ -100,8 +137,8 @@ class DeadEyeAutoAimingModule(AutoAimModule):
 
         if not len(target_list):
             return False
-        rel_mouse_x = mouseX - self.view_range[0]
-        rel_mouse_y = mouseY - self.view_range[1]
+        rel_mouse_x = mouseX - self.view_range_start[0]
+        rel_mouse_y = mouseY - self.view_range_start[1]
         # 寻找最近目标的时候，最终距离减去目标长度宽度，这样可以避免小目标出现在大目标附近时，实际距离更远的小目标成为最近的目标
         nearest_target = min(target_list, key=lambda k: abs((k.left_top[0] + k.right_bottom[0]) / 2 - rel_mouse_x) +
                                                         abs((k.left_top[1] + k.right_bottom[1]) / 2 - rel_mouse_y) -
@@ -116,7 +153,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         # print('最近目标：', nearest_target)
         # 移动到最近的目标
         position_fixed = (round((nearest_target.left_top[0] + nearest_target.right_bottom[0]) * 0.5),
-                          round((nearest_target.left_top[1] + nearest_target.right_bottom[1]) * 0.5 - 0.25 * height))
+                          round((nearest_target.left_top[1] + nearest_target.right_bottom[1]) * 0.5))
         x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))  # 计算鼠标移动
 
         # 鼠标操控部分

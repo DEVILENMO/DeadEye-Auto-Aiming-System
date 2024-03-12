@@ -21,11 +21,11 @@ class DeadEyeCore:
 
         # auto aim settings
         self.if_auto_shoot = False  # auto shoot
-        self.if_auto_aim = False  # auto aim
+        self.if_auto_aim = True  # auto aim
         self.if_tracing_target = False  # if has a target to trace
 
         # target datas
-        self.previous_target_list = []
+        self.target_list = []
         self.previous_targets_detected_time = None
         self.new_target_list = []
         self.targets_detected_time = None
@@ -86,13 +86,15 @@ class DeadEyeCore:
                     if screen_shot is None:
                         continue
                     t1 = time.time()
-                    # print('Screen shot time cost:', t1 - t0)
-                    # print('Screen shot size:', screen_shot.shape)
+                    print('Screen shot time cost:', t1 - t0)
+                    print('Screen shot size:', screen_shot.shape)
 
                     if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
                         screen_shot = cv2.cvtColor(screen_shot, cv2.COLOR_BGR2RGB)
                     self.new_target_list = self.detect_module.target_detect(screen_shot)
-                    # print(f'Detected {len(target_list)} targets.')
+                    print(f'Detected {len(self.new_target_list)} targets.')
+                    for target in self.new_target_list:
+                        print(target)
                     self.targets_detected_time = time.time()
                     self.target_ready.release()
 
@@ -117,18 +119,17 @@ class DeadEyeCore:
                 self.opt_targets()
                 # 自动瞄准
                 if self.if_auto_aim:
-                    self.if_tracing_target = self.aim_module.auto_aim(self.new_target_list)
+                    self.if_tracing_target = self.aim_module.auto_aim(self.target_list)
                 if self.if_auto_shoot:
-                    self.aim_module.auto_shoot(self.new_target_list)
+                    self.aim_module.auto_shoot(self.target_list)
             # 更新旧目标
-            self.previous_target_list = self.new_target_list
             self.previous_targets_detected_time = self.targets_detected_time
 
     def hungarian_algorithm(self):
         # 匈牙利算法，用于目标匹配
         # 计算目标数量
         matche_result = []
-        previous_targets_num = len(self.previous_target_list)
+        previous_targets_num = len(self.target_list)
         targets_num = len(self.new_target_list)
         if previous_targets_num > 0 and targets_num > 0:
             # 创建二维矩阵记录目标之间的距离
@@ -136,13 +137,13 @@ class DeadEyeCore:
             for i in range(previous_targets_num):
                 for j in range(targets_num):
                     # if label is not same, skip
-                    if self.previous_target_list[i][0] != self.new_target_list[j][0]:
+                    if self.target_list[i].label != self.new_target_list[j][0]:
                         continue
                     # 分别计算目标左上点与右下点曼哈顿距离并求和
-                    distances[i][j] = abs(self.previous_target_list[i].left_top[0] - self.new_target_list[j][1][0]) + \
-                                      abs(self.previous_target_list[i].left_top[1] - self.new_target_list[j][1][1]) + \
-                                      abs(self.previous_target_list[i].right_bottom[0] - self.new_target_list[j][2][0]) + \
-                                      abs(self.previous_target_list[i].right_bottom[1] - self.new_target_list[j][2][1])
+                    distances[i][j] = abs(self.target_list[i].left_top[0] - self.new_target_list[j][1][0]) + \
+                                      abs(self.target_list[i].left_top[1] - self.new_target_list[j][1][1]) + \
+                                      abs(self.target_list[i].right_bottom[0] - self.new_target_list[j][2][0]) + \
+                                      abs(self.target_list[i].right_bottom[1] - self.new_target_list[j][2][1])
             # 使用匈牙利算法匹配
             row_ind, col_ind = linear_sum_assignment(distances)
             # 记录匹配结果
@@ -163,22 +164,23 @@ class DeadEyeCore:
 
         # 清除丢失目标
         expired_target_list = []
-        for index, target in enumerate(self.previous_target_list):
+        for index, target in enumerate(self.target_list):
             if index not in matched_previous_index_dict.keys():
                 expired_target_list.append(target)
                 continue
             target.update_position(self.new_target_list[matched_previous_index_dict[index]][1],
                                    self.new_target_list[matched_previous_index_dict[index]][2])
         for expired_target in expired_target_list:
-            self.previous_target_list.remove(expired_target)
+            self.target_list.remove(expired_target)
 
         # 创建新目标
         for index in range(0, len(self.new_target_list)):
             if index in matched_index_list:
                 continue
             # 为新目标建立对象
-            target = Target(self.new_target_list[index][0], self.target_num, self.new_target_list[index][1],
-                            self.new_target_list[index][2])
+            new_target = self.new_target_list[index]
+            target = Target(new_target[0], self.target_num, new_target[1],
+                            new_target[2])
             self.target_num = self.target_num + 1
-            self.previous_target_list.append(target)
+            self.target_list.append(target)
         # print('位置预测用时：', time.time() - t0, 's')

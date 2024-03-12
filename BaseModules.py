@@ -1,11 +1,13 @@
 # coding: utf-8
 # cython: language_level=3
+import pyautogui
+
 from MathTools import KalmanFilter
 
 
 class DetectModule:
     def __init__(self):
-        pass
+        raise NotImplementedError('Subclass must implement this method.')
 
     def target_detect(self, img) -> list:
         raise NotImplementedError('Subclass must implement this method.')
@@ -13,13 +15,20 @@ class DetectModule:
 
 class AutoAimModule:
     def __init__(self):
-        pass
+        raise NotImplementedError('Subclass must implement this method.')
 
     def auto_shoot(self, target_list: list) -> None:
         raise NotImplementedError('Subclass must implement this method.')
 
     def auto_aim(self, target_list: list) -> bool:
         raise NotImplementedError('Subclass must implement this method.')
+
+    @staticmethod
+    def calculate_view_range_start_pos(view_range) -> tuple:
+        screen_width, screen_height = pyautogui.size()
+        left_top_x = int(screen_width / 2 - view_range[0] / 2)
+        left_top_y = int(screen_height / 2 - view_range[1] / 2)
+        return left_top_x, left_top_y
 
 
 class Target:
