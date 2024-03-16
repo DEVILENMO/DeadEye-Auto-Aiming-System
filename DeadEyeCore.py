@@ -20,8 +20,8 @@ class DeadEyeCore:
         self.aim_module = aim_module
 
         # auto aim settings
-        self.if_auto_shoot = False  # auto shoot
-        self.if_auto_aim = True  # auto aim
+        self.if_auto_shoot = False  # auto shoot state
+        self.if_auto_aim = False  # auto aim state
         self.if_tracing_target = False  # if has a target to trace
 
         # target datas
@@ -35,6 +35,7 @@ class DeadEyeCore:
         self.cumulative_time = 0
         self.frame_num = 0
         self.fps = 0
+        self.fps_displayer = None
 
         # multiple threading
         self.program_continued = threading.Semaphore(0)
@@ -93,8 +94,8 @@ class DeadEyeCore:
                         screen_shot = cv2.cvtColor(screen_shot, cv2.COLOR_BGR2RGB)
                     self.new_target_list = self.detect_module.target_detect(screen_shot)
                     print(f'Detected {len(self.new_target_list)} targets.')
-                    for target in self.new_target_list:
-                        print(target)
+                    # for target in self.new_target_list:
+                    #     print(target)
                     self.targets_detected_time = time.time()
                     self.target_ready.release()
 
@@ -104,7 +105,10 @@ class DeadEyeCore:
                         self.fps = self.frame_num / self.cumulative_time
                         self.cumulative_time = 0
                         self.frame_num = 0
-                        print('FPS:', self.fps)
+                        if self.fps_displayer:
+                            self.fps_displayer.set(f"{round(self.fps)}")
+                        else:
+                            print('FPS:', self.fps)
                 else:
                     print('Paused.')
                     self.cumulative_time = 0
