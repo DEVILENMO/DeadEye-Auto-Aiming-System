@@ -11,6 +11,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
 - **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
+- **多语言UI**: 具有简单直观的用户界面,支持英文和简体中文两种语言,用户可以方便地切换语言或者增加新的语言支持。
 
 ## Features
 
@@ -19,6 +20,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
+- **Multi-language UI**: Features a simple and intuitive user interface that supports both English and Simplified Chinese. Users can easily switch between languages or add support for new languages.
 
 
 ## 技术路线
@@ -64,19 +66,21 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 ### 运行程序
 
-1. 执行 `main.py` 文件启动程序。
-2. 程序运行中可以使用以下快捷键：
+1. 执行 `main.py` 文件启动程序，操作UI或使用快捷键进行识别系统的暂停、继续或者开启自动瞄准、自动扳机等。
+2. 程序运行中可以使用以下默认快捷键：
    - `P`: 暂停/继续程序
    - `O`: 完全结束程序
+   - `鼠标左键`: 按下时开启自动瞄准
 
 ## Usage Guide
 
 ### Running the Program
 
-1. Run the `main.py` file to start the program.
-2. During program execution, the following shortcuts can be used:
-   - `P`: Pause/continue the program
-   - `O`: Completely terminate the program
+1. Execute the `main.py` file to start the program. Use the UI or hotkeys to pause, resume, or enable features like auto-aiming and auto-triggering.
+2. While the program is running, you can use the following default hotkeys:
+   - `P`: Pause/Resume the program
+   - `O`: Completely exit the program
+   - `Left Mouse Button`: Enable auto-aiming while pressed
 
 ### 效果演示
 
