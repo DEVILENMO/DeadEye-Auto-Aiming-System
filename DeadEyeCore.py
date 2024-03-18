@@ -87,8 +87,8 @@ class DeadEyeCore:
                     if screen_shot is None:
                         continue
                     t1 = time.time()
-                    print('Screen shot time cost:', t1 - t0)
-                    print('Screen shot size:', screen_shot.shape)
+                    # print('Screen shot time cost:', t1 - t0)
+                    # print('Screen shot size:', screen_shot.shape)
 
                     if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
                         screen_shot = cv2.cvtColor(screen_shot, cv2.COLOR_BGR2RGB)
