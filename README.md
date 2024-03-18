@@ -103,3 +103,47 @@ The following animation demonstrates the aiming assist effect provided by this p
 - **Note 1**: This project is integrated from previously damaged project code and has not been completely retested. There may be unknown errors or issues, so please be cautious when using it.
 - **Note 2**: The project is for learning and testing purposes only, and it is strictly forbidden to use it for game cheating or any behavior that violates game usage rules.
 - **Note 3**: As of March 12, 2024, the project has fixed most of the errors and has updated the target detection module to the Yolov8 version. It now uses the .pt weight file for target detection, and the assisted aiming has been tested without issues. The inference process for .onnx and .trt weight files has not been tested yet.
+
+## 使用须知
+
+欢迎您使用本仓库中的文件。在使用本仓库中的任何文件之前，请仔细阅读以下使用须知：
+
+1. **版权声明**：本仓库中的原创性文件所有权利均归仓库所有者所有，未经许可不得用于商业用途。
+
+2. **引用与借鉴**：如果您在自己的项目中借鉴、引用或使用了本仓库中的任何文件，请务必在您的项目文档（如README文件）中明确注明出处，并提供指向本仓库的链接。建议的引用格式如下：
+
+   本项目中使用了 [DeadEyeAutoAimingSystem](https://github.com/DEVILENMO/DeadEyeAutoAimingSystem) 仓库中的部分文件，特此表示感谢。
+
+3. **再次分发**：如果您需要再次分发本仓库中的文件，请确保在分发时包含本使用须知，并明确注明原始仓库的链接。
+
+4. **问题反馈**：如果您在使用本仓库中的文件时遇到任何问题，欢迎通过 Issue 或 Pull Request 的方式反馈给我们。我们会尽快处理并给予回复。
+
+## Usage Notice
+
+Welcome to use the files in this repository. Before using any files in this repository, please read the following usage notice carefully:
+
+1. **Copyright Statement**: The original files in this repository are owned by the repository owner. Commercial use is not allowed without permission.
+
+2. **Citation and Reference**: If you reference, cite, or use any files from this repository in your own project, please make sure to clearly indicate the source in your project documentation (such as the README file) and provide a link to this repository. The recommended citation format is as follows:
+
+   This project uses some files from the [DeadEyeAutoAimingSystem](https://github.com/DEVILENMO/DeadEyeAutoAimingSystem) repository. We would like to express our gratitude.
+
+3. **Redistribution**: If you need to redistribute the files from this repository, please ensure that you include this usage notice and clearly state the link to the original repository when distributing.
+
+4. **Feedback**: If you encounter any problems while using the files in this repository, please feel free to provide feedback to us through Issues or Pull Requests. We will handle and respond as soon as possible.
+
+## 参考项目
+
+在开发本项目的过程中,我们参考了以下优秀的开源项目。在此对这些项目的贡献者表示感谢!
+
+- [YOLOv7](https://github.com/WongKinYiu/yolov7): YOLOv7 的官方实现。
+- [Ultralytics Assets](https://github.com/ultralytics/assets): Ultralytics 的资源库,包含各种 YOLO 模型的训练数据、权重文件和配置文件。
+- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目,帮助我们优化了模型的推理性能。
+
+## Reference Projects
+
+During the development of this project, we referenced the following excellent open-source projects. We would like to express our gratitude to the contributors of these projects!
+
+- [YOLOv7](https://github.com/WongKinYiu/yolov7): The official implementation of YOLOv7.
+- [Ultralytics Assets](https://github.com/ultralytics/assets): The resource repository of Ultralytics, containing training data, weight files, and configuration files for various YOLO models.
+- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): A comprehensive project for deploying YOLO series models with TensorRT, which helped us optimize the inference performance of the models.

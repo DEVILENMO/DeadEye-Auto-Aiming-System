@@ -2,35 +2,33 @@
 # cython: language_level=3
 import time
 
-import cv2
-import pyautogui
 import pydirectinput
 from pynput import mouse
+from ultralytics import YOLO
 
 from BaseModules import *
 from TensorRTEngine import *
-from ultralytics import YOLO
 
 
 class TRTPredictor(TensorRTEngine):
-    def __init__(self, engine_path):
-        super(TRTPredictor, self).__init__(engine_path)
-        self.n_classes = 80  # your model classes
+    def __init__(self, model_path):
+        super(TRTPredictor, self).__init__(model_path)
+        self.n_classes = 80
 
 
 class YoloDetector(DetectModule):
-    def __init__(self, weight: str):
+    def __init__(self, model: str):
         super(YoloDetector).__init__()
         self.model = None
         self.model_type = None
-        self.load_model(weight)
+        self.load_model(model)
 
-    def load_model(self, weight: str):
-        if '.pt' in weight:
-            self.model = YOLO(weight)
+    def load_model(self, model: str):
+        if '.pt' in model:
+            self.model = YOLO(model)
             self.model_type = 'pt'
         else:
-            self.model = TRTPredictor(engine_path=weight)
+            self.model = TRTPredictor(model_path=model)
             self.model_type = 'trt'
 
     def target_detect(self, img) -> list:
