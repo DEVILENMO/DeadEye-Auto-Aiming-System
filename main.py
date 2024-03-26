@@ -262,7 +262,7 @@ def stop_program():
 if __name__ == '__main__':
     view_range = (640, 640)
     print('Initing detect module...')
-    detect_module = YoloDetector('./weights/apex_v8s.pt')  # set your model file here, .pt or .onnx
+    detect_module = YoloDetector('./weights/apex_v8s.pt')  # set your model file here, .pt or .trt
     print('Initing auto aiming module...')
     auto_aiming_module = DeadEyeAutoAimingModule(view_range)
     dead_eye = DeadEyeCore(detect_module, auto_aiming_module, view_range)

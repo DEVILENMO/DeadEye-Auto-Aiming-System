@@ -134,16 +134,28 @@ Welcome to use the files in this repository. Before using any files in this repo
 
 ## 参考项目
 
-在开发本项目的过程中,我们参考了以下优秀的开源项目。在此对这些项目的贡献者表示感谢!
+在开发本项目的过程中,我参考了以下优秀的开源项目。在此对这些项目的贡献者表示感谢!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): YOLOv7 的官方实现。
 - [Ultralytics Assets](https://github.com/ultralytics/assets): Ultralytics 的资源库,包含各种 YOLO 模型的训练数据、权重文件和配置文件。
-- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目,帮助我们优化了模型的推理性能。
+- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目,帮助我优化了模型的推理性能。
 
 ## Reference Projects
 
-During the development of this project, we referenced the following excellent open-source projects. We would like to express our gratitude to the contributors of these projects!
+During the development of this project, I referenced the following excellent open-source projects. I would like to express our gratitude to the contributors of these projects!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): The official implementation of YOLOv7.
 - [Ultralytics Assets](https://github.com/ultralytics/assets): The resource repository of Ultralytics, containing training data, weight files, and configuration files for various YOLO models.
 - [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): A comprehensive project for deploying YOLO series models with TensorRT, which helped us optimize the inference performance of the models.
+
+## 开源许可
+
+本项目采用 GNU Affero General Public License v3.0 (AGPLv3) 开源许可证。在使用、修改或分发本项目代码时,你必须同意并遵守 AGPLv3 的所有条款。
+
+请查看 [LICENSE](LICENSE.txt) 文件以获取完整的许可证文本。
+
+## Open Source License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3). By using, modifying, or distributing the code in this project, you agree to comply with all the terms and conditions of AGPLv3.
+
+Please refer to the [LICENSE](LICENSE.txt) file for the full text of the license.

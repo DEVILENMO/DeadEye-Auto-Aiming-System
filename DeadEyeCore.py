@@ -22,7 +22,6 @@ class DeadEyeCore:
         # auto aim settings
         self.if_auto_shoot = False  # auto shoot state
         self.if_auto_aim = False  # auto aim state
-        self.if_tracing_target = False  # if has a target to trace
 
         # target datas
         self.target_list = []
@@ -123,7 +122,7 @@ class DeadEyeCore:
                 self.opt_targets()
                 # 自动瞄准
                 if self.if_auto_aim:
-                    self.if_tracing_target = self.aim_module.auto_aim(self.target_list)
+                    self.aim_module.auto_aim(self.target_list)
                 if self.if_auto_shoot:
                     self.aim_module.auto_shoot(self.target_list)
             # 更新旧目标
