@@ -47,8 +47,8 @@ class DeadEyeCore:
             win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN),
             win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN))
         print('Screen resolution:', self.ori_resolution_x, 'x', self.ori_resolution_y)
-        # self.rel_resolution_x, self.rel_resolution_y = dxcam.output_res()[0]
-        # print('Scaled screen resolution:', self.rel_resolution_x, 'x', self.rel_resolution_y)
+        self.rel_resolution_x, self.rel_resolution_y = dxcam.output_res()[0]
+        print('Scaled screen resolution:', self.rel_resolution_x, 'x', self.rel_resolution_y)
         self.screen_shot_camera = ScreenShotHelper(view_range[0], view_range[1], ScreenShotHelper.CameraType.DXCAM)
 
         # start threads

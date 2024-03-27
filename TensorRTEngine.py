@@ -5,12 +5,12 @@ from collections import OrderedDict, namedtuple
 import cv2
 import numpy as np
 import tensorrt as trt
-# For error 'FileNotFoundError: Could not find: nvinfer.dll. Is it on your PATH?' Download TensorRT pack and add
-# TensorRT-x.x.x.x\lib to environment variable PATH. For error 'FileNotFoundError: Could not find: cudnn64_8.dll. Is
-# it on your PATH?' Download cudnn64_8.dll then also add it to path like C:\Program Files\NVIDIA GPU Computing
-# Toolkit\CUDA\vxx.x\bin.
-# For errors like 'Could not find module 'C:\...\nvinfer_plugin.dll' (or one of its
-# dependencies). Try using the full path with constructor syntax.'
+# For error 'FileNotFoundError: Could not find: nvinfer.dll. Is it on your PATH?'
+# Download TensorRT pack and add TensorRT-x.x.x.x\lib to environment variable PATH.
+# For error 'FileNotFoundError: Could not find: cudnn64_8.dll. Is it on your PATH?'
+# Download cudnn64_8.dll then also add it to path like C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\vxx.x\bin.
+# For errors like 'Could not find module 'C:\...\nvinfer_plugin.dll' (or one of its dependencies).
+# Try using the full path with constructor syntax.'
 # change ctypes.CDLL(find_lib(lib)) to ctypes.CDLL(find_lib(lib),winmode=0)
 import torch
 import pycuda.driver as cuda
