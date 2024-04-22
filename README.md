@@ -1,5 +1,7 @@
 # DeadEye 辅助瞄准系统 / DeadEye Auto Aiming System
 
+<img src="DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
+
 DeadEye 辅助瞄准系统是一款高性能的图像辅助瞄准工具，旨在通过图像处理和目标追踪技术提高射击精度。该系统通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。
 
 The DeadEye Aiming Assist System is a high-performance image aiming tool designed to improve shooting accuracy through image processing and target tracking technology. The system analyzes screen captures to detect and track targets, and ultimately facilitates aiming and triggers actions through simulated operations.
