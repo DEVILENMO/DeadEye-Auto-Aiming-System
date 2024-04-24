@@ -96,15 +96,15 @@ The following animation demonstrates the aiming assist effect provided by this p
 
 ### 注意事项
 
-- **注1**：此项目是从之前损坏的项目代码中整合而来，尚未进行完整的重新测试。可能存在未知的错误或问题，请在使用时注意。
+- **注1**：此项目是从之前损坏的项目代码中整合而来，部分功能缺失，例如在屏幕中的众多目标中只追踪其中之一。
 - **注2**：项目仅供学习和测试用途，严禁用于游戏作弊或任何违反游戏使用规则的行为。
-- **注3**：2024.3.12，项目已修复了绝大多数错误，并且更换目标检测模块至 Yolov8 版本，使用 .pt 权重文件进行目标检测并且辅助瞄准测试无误，暂未测试 .onnx 及 .trt 权重文件的推理流程。
+- **注3**：2024.4.25，项目已修复了绝大多数错误，并且更换目标检测模块至 Yolov8 版本，使用 .pt 以及 .trt 权重文件进行目标检测并且辅助瞄准测试无误。
 
 ### Precautions
 
-- **Note 1**: This project is integrated from previously damaged project code and has not been completely retested. There may be unknown errors or issues, so please be cautious when using it.
+- **Note 1**: This project is integrated from previously damaged project code and some functions were lost, e.g.tracking one target among many targets.
 - **Note 2**: The project is for learning and testing purposes only, and it is strictly forbidden to use it for game cheating or any behavior that violates game usage rules.
-- **Note 3**: As of March 12, 2024, the project has fixed most of the errors and has updated the target detection module to the Yolov8 version. It now uses the .pt weight file for target detection, and the assisted aiming has been tested without issues. The inference process for .onnx and .trt weight files has not been tested yet.
+- **Note 3**: As of April 25, 2024, the project has fixed most of the errors and has updated the target detection module to the Yolov8 version. It now uses the .pt and .trt weight file for target detection, and the assisted aiming has been tested without issues.
 
 ### 常见问题
 
