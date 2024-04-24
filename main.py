@@ -254,7 +254,9 @@ def pause():
 # 结束程序
 def stop_program():
     print('CLOSING...')
-    global botClosed
+    global detect_module, auto_aiming_module, botClosed
+    detect_module.on_exit()
+    auto_aiming_module.on_exit()
     botClosed.release()
     sys.exit(0)
 
@@ -262,7 +264,7 @@ def stop_program():
 if __name__ == '__main__':
     view_range = (640, 640)
     print('Initing detect module...')
-    detect_module = YoloDetector('./weights/apex_v8s.pt')  # set your model file here, .pt or .trt
+    detect_module = YoloDetector('./weights/apex_v8s.trt')  # set your model file here, .pt or .trt
     print('Initing auto aiming module...')
     auto_aiming_module = DeadEyeAutoAimingModule(view_range)
     dead_eye = DeadEyeCore(detect_module, auto_aiming_module, view_range)

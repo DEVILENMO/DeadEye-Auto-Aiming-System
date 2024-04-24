@@ -10,12 +10,6 @@ from BaseModules import *
 from TensorRTEngine import *
 
 
-class TRTPredictor(TensorRTEngine):
-    def __init__(self, model_path):
-        super(TRTPredictor, self).__init__(model_path)
-        self.n_classes = 80
-
-
 class YoloDetector(DetectModule):
     def __init__(self, model: str):
         super(YoloDetector).__init__()
@@ -23,12 +17,17 @@ class YoloDetector(DetectModule):
         self.model_type = None
         self.load_model(model)
 
+    def on_exit(self):
+        if self.model_type == 'trt':
+            self.model.on_exit()
+
     def load_model(self, model: str):
         if '.pt' in model:
             self.model = YOLO(model)
             self.model_type = 'pt'
         else:
-            self.model = TRTPredictor(model_path=model)
+            print('Loading TensorRT engine...')
+            self.model = TensorRTEngine(model)
             self.model_type = 'trt'
 
     def target_detect(self, img) -> list:
@@ -63,8 +62,13 @@ class YoloDetector(DetectModule):
         # cv2.imshow("Detection Results", img)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
-
         return results
+
+
+DEFAULT_P = 0.5
+DEFEULT_I = 0.25
+DEFAULT_D = 0.1
+DEFAULT_R = 0.9
 
 
 class DeadEyeAutoAimingModule(AutoAimModule):
@@ -84,14 +88,14 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         self.last_auto_shoot_time = time.time()
 
         # PID
-        self.max_movement = 64  # max output movement on single direction, to avoid large movement
-        # PID核心参数 0.75/0.15/0.01
+        self.max_movement = 320  # max output movement on single direction, to avoid large movement
+        # PID核心参数
         k_adjust = 1
-        self.k_p = 0.75 * k_adjust  # 比例系数 主要移动
-        self.k_i = 0.15 * k_adjust  # 积分系数 补充移动
-        self.k_d = 0.01 * k_adjust  # 微分系数 抑制
+        self.k_p = DEFAULT_P * k_adjust  # 比例系数 主要移动
+        self.k_i = DEFEULT_I * k_adjust  # 积分系数 补充移动
+        self.k_d = DEFAULT_D * k_adjust  # 微分系数 抑制
         # 回弹强度
-        self.rebound_strength = 0.01  # 作用于积分系数，用于消除瞄准回弹效果
+        self.rebound_strength = DEFAULT_R  # 作用于积分系数，用于消除瞄准回弹效果
         # PID计算变量
         # 前一次时间，用于计算dt
         self.previous_time = None
@@ -113,15 +117,19 @@ class DeadEyeAutoAimingModule(AutoAimModule):
             tag, left_top, right_bottom = target.label, target.left_top, target.right_bottom
             width = right_bottom[0] - left_top[0]
             height = right_bottom[1] - left_top[1]
-            if left_top[0] + self.view_range_start[0] + 0.25 * width <= mouseX <= right_bottom[0] + self.view_range_start[
-                0] - 0.25 * width:
-                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[1] - 0.75 * height:
+            if left_top[0] + self.view_range_start[0] + 0.25 * width <= mouseX <= right_bottom[0] + \
+                    self.view_range_start[
+                        0] - 0.25 * width:
+                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[
+                    1] - 0.75 * height:
                     # windll.user32.BlockInput(1)
                     self.shoot()
                     break
-            if left_top[0] + self.view_range_start[0] + 0.15 * width <= mouseX <= right_bottom[0] + self.view_range_start[
-                0] - 0.15 * width:
-                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[1] - 0.5 * height:
+            if left_top[0] + self.view_range_start[0] + 0.15 * width <= mouseX <= right_bottom[0] + \
+                    self.view_range_start[
+                        0] - 0.15 * width:
+                if left_top[1] + self.view_range_start[1] <= mouseY <= right_bottom[1] + self.view_range_start[
+                    1] - 0.5 * height:
                     # windll.user32.BlockInput(1)
                     self.shoot()
                     self.last_auto_shoot_time = t
@@ -162,21 +170,21 @@ class DeadEyeAutoAimingModule(AutoAimModule):
     def shoot(self):
         self.mouse_controller.click(mouse.Button.left)
 
-    def set_pid_parameters(self, p=0.75, i=0.15, d=0.01, rebond_strength=0.01):
-        self.k_p = p
-        self.k_i = i
-        self.k_d = d
-        self.rebound_strength = rebond_strength
+    def set_pid_parameters(self, p=None, i=None, d=None, rebond_strength=None):
+        if p is not None:
+            self.k_p = p
+        if i is not None:
+            self.k_i = i
+        if d is not None:
+            self.k_d = d
+        if rebond_strength is not None:
+            self.rebound_strength = rebond_strength
 
-    def calculate_mouse_movement_by_pid(self, target_position, mouse_position, only_update_info=False):
+    def calculate_mouse_movement_by_pid(self, target_position, mouse_position):
         # PID控制算法
         if self.previous_time is not None and time.time() - self.previous_time > 0.5:
             # 消除残像
             self.previous_time = None
-
-        if self.previous_time is None:
-            # 初始化PID
-            self.previous_time = time.time()
             self.x_integral_value = 0
             self.y_integral_value = 0
             self.previous_distance_x = 0
@@ -186,17 +194,16 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         current_time = time.time()
         distance_x = target_position[0] - mouse_position[0]
         if distance_x * self.previous_distance_x < 0:
-            self.x_integral_value = self.x_integral_value * self.rebound_strength  # 降低积分量，减少回弹
+            self.x_integral_value = self.x_integral_value * self.rebound_strength  # 降低积分量
         distance_y = target_position[1] - mouse_position[1]
         if distance_y * self.previous_distance_y < 0:
-            self.y_integral_value = self.y_integral_value * self.rebound_strength  # 降低积分量，减少回弹
+            self.y_integral_value = self.y_integral_value * self.rebound_strength  # 降低积分量
 
-        x_r, y_r = 0, 0  # 初始化返回值
-        if not only_update_info:
-            # P/比例
-            x_p = self.k_p * distance_x
-            y_p = self.k_p * distance_y
+        # P/比例
+        x_p = self.k_p * distance_x
+        y_p = self.k_p * distance_y
 
+        if self.previous_time is not None:
             # I/积分
             d_time = current_time - self.previous_time
             self.x_integral_value = self.x_integral_value + distance_x
@@ -206,25 +213,30 @@ class DeadEyeAutoAimingModule(AutoAimModule):
 
             # D/微分
             if d_time != 0:
-                derivative_x = (distance_x - self.previous_distance_x)
+                derivative_x = (distance_x - self.previous_distance_x) / d_time
                 x_d = self.k_d * derivative_x
-                derivative_y = (distance_y - self.previous_distance_y)
+                derivative_y = (distance_y - self.previous_distance_y) / d_time
                 y_d = self.k_d * derivative_y
             else:
                 x_d = 0
                 y_d = 0
+        else:
+            x_i = 0
+            y_i = 0
+            x_d = 0
+            y_d = 0
 
-            # 结果
-            x_r = x_p + x_i + x_d
-            # print(x_p, x_i, x_d)
-            y_r = y_p + y_i + y_d
-            # print(y_p, y_i, y_d)
+        # 结果
+        x_r = x_p + x_i + x_d
+        # print(x_p, x_i, x_d)
+        y_r = y_p + y_i + y_d
+        # print(y_p, y_i, y_d)
 
-            # 极大值约束
-            if abs(x_r) > self.max_movement:
-                x_r = x_r / abs(x_r) * self.max_movement
-            if abs(y_r) > self.max_movement:
-                y_r = y_r / abs(y_r) * self.max_movement
+        # 极大值约束
+        if abs(x_r) > self.max_movement:
+            x_r = x_r / abs(x_r) * self.max_movement
+        if abs(y_r) > self.max_movement:
+            y_r = y_r / abs(y_r) * self.max_movement
 
         # 更新旧信息
         self.previous_time = current_time

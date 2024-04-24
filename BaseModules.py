@@ -12,6 +12,10 @@ class DetectModule:
     def target_detect(self, img) -> list:
         raise NotImplementedError('Subclass must implement this method.')
 
+    def on_exit(self):
+        """This function is called when the program is closed."""
+        pass
+
 
 class AutoAimModule:
     def __init__(self):
@@ -29,6 +33,10 @@ class AutoAimModule:
         left_top_x = int(screen_width / 2 - view_range[0] / 2)
         left_top_y = int(screen_height / 2 - view_range[1] / 2)
         return left_top_x, left_top_y
+
+    def on_exit(self):
+        """This function is called when the program is closed."""
+        pass
 
 
 class Target:

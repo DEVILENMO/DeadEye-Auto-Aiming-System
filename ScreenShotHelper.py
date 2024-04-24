@@ -45,7 +45,7 @@ class ScreenShotHelper:
                 self.camera_type = self.CameraType.MSS
 
         if self.camera_type == self.CameraType.DXCAM:
-            self.image_color_mode = self.ImageColorMode.RGB
+            self.image_color_mode = self.ImageColorMode.BGR
         elif self.camera_type == self.CameraType.MSS:
             self.image_color_mode = self.ImageColorMode.BGR
 

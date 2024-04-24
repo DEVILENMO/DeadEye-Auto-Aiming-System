@@ -20,28 +20,13 @@ import matplotlib.pyplot as plt
 
 class TensorRTEngine(object):
     def __init__(self, engine_path):
+        self.cuda_context_for_multiple_threading = cuda.Device(0).make_context()
         self.mean = None
         self.std = None
 
-        # here use default model for testing
-        self.n_classes = 80
-        self.class_names = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
-                            'traffic light',
-                            'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse',
-                            'sheep', 'cow',
-                            'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie',
-                            'suitcase', 'frisbee',
-                            'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove',
-                            'skateboard', 'surfboard',
-                            'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
-                            'banana', 'apple',
-                            'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake',
-                            'chair', 'couch',
-                            'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote',
-                            'keyboard', 'cell phone',
-                            'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase',
-                            'scissors', 'teddy bear',
-                            'hair drier', 'toothbrush']
+        # Todo: If you choose to use your .trt weight file, you should modify the class info here.
+        self.class_num = 3
+        self.class_name_list = ['ally', 'enemy', 'bot']
 
         logger = trt.Logger(trt.Logger.WARNING)
         logger.min_severity = trt.Logger.Severity.ERROR
@@ -57,7 +42,7 @@ class TensorRTEngine(object):
         for binding in engine:
             size = trt.volume(engine.get_binding_shape(binding))
             dtype = trt.nptype(engine.get_binding_dtype(binding))
-            host_mem = cuda.pagelocked_empty(size, dtype)
+            host_mem = cuda.pagelocked_empty(size, dtype, mem_flags=cuda.host_alloc_flags.PORTABLE)
             device_mem = cuda.mem_alloc(host_mem.nbytes)
             self.bindings.append(int(device_mem))
             if engine.binding_is_input(binding):
@@ -65,8 +50,14 @@ class TensorRTEngine(object):
             else:
                 self.outputs.append({'host': host_mem, 'device': device_mem})
 
-    def infer(self, img):
-        self.inputs[0]['host'] = np.ravel(img)
+    def on_exit(self):
+        print('Destroying TensorRTEngine...')
+        self.cuda_context_for_multiple_threading.pop()
+
+    def _infer(self, img):
+        self.cuda_context_for_multiple_threading.push()
+        temp_host_mem = np.ravel(img)
+        np.copyto(self.inputs[0]['host'], temp_host_mem)
         # transfer data to the gpu
         for inp in self.inputs:
             cuda.memcpy_htod_async(inp['device'], inp['host'], self.stream)
@@ -81,28 +72,35 @@ class TensorRTEngine(object):
         self.stream.synchronize()
 
         data = [out['host'] for out in self.outputs]
+        self.cuda_context_for_multiple_threading.pop()
         return data
 
-    def inference(self, img, conf=0.5, end2end=False):
-        origin_img = img
+    def inference(self, origin_img, conf=0.5, end2end=False):
         img, ratio = preproc(origin_img, self.imgsz, self.mean, self.std)
-        data = self.infer(img)
+        data = self._infer(img)
         if end2end:
             num, final_boxes, final_scores, final_cls_inds = data
             final_boxes = np.reshape(final_boxes / ratio, (-1, 4))
             dets = np.concatenate([final_boxes[:num[0]], np.array(final_scores)[:num[0]].reshape(-1, 1),
                                    np.array(final_cls_inds)[:num[0]].reshape(-1, 1)], axis=-1)
         else:
-            predictions = np.reshape(data, (1, -1, int(5 + self.n_classes)))[0]
+            predictions = np.reshape(data, (1, -1, int(5 + self.class_num)))[0]
             dets = self.postprocess(predictions, ratio)
 
+        targets = []
         if dets is not None:
             final_boxes, final_scores, final_cls_inds = dets[:,
                                                         :4], dets[:, 4], dets[:, 5]
+            class_names = self.class_name_list
             boxes = final_boxes[final_scores > conf]
-            # origin_img = vis(origin_img, final_boxes, final_scores, final_cls_inds,
-            #                  conf=conf, class_names=self.class_names)
-        return boxes
+            classes = final_cls_inds[final_scores > conf]
+
+            for box, cls_idx in zip(boxes, classes):
+                x1, y1, x2, y2 = map(int, box)
+                class_name = class_names[int(cls_idx)]
+                target_info = [class_name, (x1, y1), (x2, y2)]
+                targets.append(target_info)
+        return targets
 
     @staticmethod
     def postprocess(predictions, ratio):
@@ -185,9 +183,6 @@ def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
         interpolation=cv2.INTER_LINEAR,
     ).astype(np.float32)
     padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
-    # if use yolox set
-    # padded_img = padded_img[:, :, ::-1]
-    # padded_img /= 255.0
     padded_img = padded_img[:, :, ::-1]
     padded_img /= 255.0
     if mean is not None:
@@ -197,50 +192,3 @@ def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
     padded_img = padded_img.transpose(swap)
     padded_img = np.ascontiguousarray(padded_img, dtype=np.float32)
     return padded_img, r
-
-
-def rainbow_fill(size=50):  # simpler way to generate rainbow color
-    cmap = plt.get_cmap('jet')
-    color_list = []
-
-    for n in range(size):
-        color = cmap(n / size)
-        color_list.append(color[:3])  # might need rounding? (round(x, 3) for x in color)[:3]
-
-    return np.array(color_list)
-
-
-_COLORS = rainbow_fill(80).astype(np.float32).reshape(-1, 3)
-
-
-def vis(img, boxes, scores, cls_ids, conf=0.5, class_names=None):
-    for i in range(len(boxes)):
-        box = boxes[i]
-        cls_id = int(cls_ids[i])
-        score = scores[i]
-        if score < conf:
-            continue
-        x0 = int(box[0])
-        y0 = int(box[1])
-        x1 = int(box[2])
-        y1 = int(box[3])
-
-        color = (_COLORS[cls_id] * 255).astype(np.uint8).tolist()
-        text = '{}:{:.1f}%'.format(class_names[cls_id], score * 100)
-        txt_color = (0, 0, 0) if np.mean(_COLORS[cls_id]) > 0.5 else (255, 255, 255)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-
-        txt_size = cv2.getTextSize(text, font, 0.4, 1)[0]
-        cv2.rectangle(img, (x0, y0), (x1, y1), color, 2)
-
-        txt_bk_color = (_COLORS[cls_id] * 255 * 0.7).astype(np.uint8).tolist()
-        cv2.rectangle(
-            img,
-            (x0, y0 + 1),
-            (x0 + txt_size[0] + 1, y0 + int(1.5 * txt_size[1])),
-            txt_bk_color,
-            -1
-        )
-        cv2.putText(img, text, (x0, y0 + txt_size[1]), font, 0.4, txt_color, thickness=1)
-
-    return img
