@@ -9,7 +9,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## 特性
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
-- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .onnx /.trt 模型进行精确的目标检测（目前只测试了 .pt 模型，确认可以正常使用）。
+- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .onnx /.trt 模型进行精确的目标检测。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
 - **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
@@ -18,7 +18,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## Features
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
-- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .onnx or .trt formats (currently, only the .pt model has been tested and confirmed to work properly).
+- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .onnx or .trt formats.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
