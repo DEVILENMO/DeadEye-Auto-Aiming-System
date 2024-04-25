@@ -254,7 +254,8 @@ def pause():
 # 结束程序
 def stop_program():
     print('CLOSING...')
-    global detect_module, auto_aiming_module, botClosed
+    global dead_eye, detect_module, auto_aiming_module, botClosed
+    dead_eye.on_exit()
     detect_module.on_exit()
     auto_aiming_module.on_exit()
     botClosed.release()

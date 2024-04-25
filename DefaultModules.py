@@ -65,8 +65,8 @@ class YoloDetector(DetectModule):
         return results
 
 
-DEFAULT_P = 0.5
-DEFEULT_I = 0.25
+DEFAULT_P = 0.75
+DEFEULT_I = 0.5
 DEFAULT_D = 0.1
 DEFAULT_R = 0.9
 
@@ -75,6 +75,8 @@ class DeadEyeAutoAimingModule(AutoAimModule):
     def __init__(self, view_range):
         super(DeadEyeAutoAimingModule).__init__()
         self.view_range_start = self.calculate_view_range_start_pos(view_range)
+
+        self.tracking_target_id = None
 
         # mouse controller
         self.mouse_controller = mouse.Controller()
@@ -104,7 +106,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         self.previous_distance_x = 0
         self.previous_distance_y = 0
 
-    def auto_shoot(self, target_list: list):
+    def auto_shoot(self, target_list: list[Target]) -> None:
         # 自动扳机
         t = time.time()
         if t - self.last_auto_shoot_time < 0.25:
@@ -137,35 +139,58 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         # print('瞄准计算用时：', time.time() - t)
         return
 
-    def auto_aim(self, target_list: list):
-        t = time.time()
+    def set_tracking_target_id(self, to_track_target_id: [int | None]):
+        self.tracking_target_id = to_track_target_id
+        self.clear_pid_history()
+
+    def auto_aim(self, target_list: list[Target]) -> tuple[int, int]:
         mouseX, mouseY = pyautogui.position()
 
         if not len(target_list):
-            return False
+            self.set_tracking_target_id(None)
+            return 0, 0
         rel_mouse_x = mouseX - self.view_range_start[0]
         rel_mouse_y = mouseY - self.view_range_start[1]
-        # 寻找最近目标的时候，最终距离减去目标长度宽度，这样可以避免小目标出现在大目标附近时，实际距离更远的小目标成为最近的目标
-        nearest_target = min(target_list, key=lambda k: abs((k.left_top[0] + k.right_bottom[0]) / 2 - rel_mouse_x) +
-                                                        abs((k.left_top[1] + k.right_bottom[1]) / 2 - rel_mouse_y) -
-                                                        (k.right_bottom[0] - k.left_top[0] + k.right_bottom[1] -
-                                                         k.left_top[1]))
-        width = nearest_target.right_bottom[0] - nearest_target.left_top[0]
-        height = nearest_target.right_bottom[1] - nearest_target.left_top[1]
-        distance_x = (nearest_target.left_top[0] + nearest_target.right_bottom[0]) / 2 - rel_mouse_x
-        distance_y = (nearest_target.left_top[1] + nearest_target.right_bottom[1]) / 2 - rel_mouse_y
+
+        aim_target = None
+        if self.tracking_target_id is None:
+            aim_target = self.find_closest_target(target_list, rel_mouse_x, rel_mouse_y)
+            self.set_tracking_target_id(aim_target.index)
+        else:
+            for target in target_list:
+                if target == self.tracking_target_id:
+                    aim_target = target
+                    break
+            if aim_target is None:
+                aim_target = self.find_closest_target(target_list, rel_mouse_x, rel_mouse_y)
+                self.set_tracking_target_id(aim_target.index)
+
+        width = aim_target.right_bottom[0] - aim_target.left_top[0]
+        height = aim_target.right_bottom[1] - aim_target.left_top[1]
+        distance_x = (aim_target.left_top[0] + aim_target.right_bottom[0]) / 2 - rel_mouse_x
+        distance_y = (aim_target.left_top[1] + aim_target.right_bottom[1]) / 2 - rel_mouse_y
         if distance_x > width * self.auto_aim_range_x or distance_y > height * self.auto_aim_range_y:
-            return False
+            return 0, 0
         # print('最近目标：', nearest_target)
         # 移动到最近的目标
-        position_fixed = (round((nearest_target.left_top[0] + nearest_target.right_bottom[0]) * 0.5),
-                          round((nearest_target.left_top[1] + nearest_target.right_bottom[1]) * 0.5))
+        position_fixed = (round((aim_target.left_top[0] + aim_target.right_bottom[0]) * 0.5),
+                          round((aim_target.left_top[1] + aim_target.right_bottom[1]) * 0.5))
         x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))  # 计算鼠标移动
 
         # 鼠标操控部分
         pydirectinput.moveRel(int(x_r * self.aim_sensitive),
                               int(y_r * self.aim_sensitive),
                               duration=0.000, relative=True)
+        return x_r, y_r
+
+    @staticmethod
+    def find_closest_target(target_list: list[Target], mouse_pos_x: int, mouse_pos_y: int) -> Target:
+        # 寻找最近目标的时候，最终距离减去目标长度宽度，这样可以避免小目标出现在大目标附近时，实际距离更远的小目标成为最近的目标
+        nearest_target = min(target_list, key=lambda k: abs((k.left_top[0] + k.right_bottom[0]) / 2 - mouse_pos_x) +
+                                                        abs((k.left_top[1] + k.right_bottom[1]) / 2 - mouse_pos_y) -
+                                                        (k.right_bottom[0] - k.left_top[0] + k.right_bottom[1] -
+                                                         k.left_top[1]))
+        return nearest_target
 
     def shoot(self):
         self.mouse_controller.click(mouse.Button.left)
@@ -180,15 +205,18 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         if rebond_strength is not None:
             self.rebound_strength = rebond_strength
 
+    def clear_pid_history(self):
+        self.previous_time = None
+        self.x_integral_value = 0
+        self.y_integral_value = 0
+        self.previous_distance_x = 0
+        self.previous_distance_y = 0
+
     def calculate_mouse_movement_by_pid(self, target_position, mouse_position):
         # PID控制算法
         if self.previous_time is not None and time.time() - self.previous_time > 0.5:
             # 消除残像
-            self.previous_time = None
-            self.x_integral_value = 0
-            self.y_integral_value = 0
-            self.previous_distance_x = 0
-            self.previous_distance_y = 0
+            self.clear_pid_history()
 
         # 绝对偏差
         current_time = time.time()
@@ -242,5 +270,4 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         self.previous_time = current_time
         self.previous_distance_x = distance_x
         self.previous_distance_y = distance_y
-
         return x_r, y_r

@@ -31,14 +31,11 @@ class DeadEyeCore:
         self.target_num = 0  # total number of targets
 
         # fps
-        self.cumulative_time = 0
-        self.frame_num = 0
-        self.fps = 0
         self.fps_displayer = None
 
         # multiple threading
         self.program_continued = threading.Semaphore(0)
-        self.target_ready = threading.Semaphore(0)
+        self.target_updated = threading.Semaphore(0)
 
         # resolution
         user32 = windll.user32
@@ -56,15 +53,19 @@ class DeadEyeCore:
         target_detecting_therad.daemon = True
         target_detecting_therad.start()
         print('Target detecting thread started.')
-        auto_aiming_thread = threading.Thread(target=self.auto_aiming, args=())
+        auto_aiming_thread = threading.Thread(target=self.auto_aim, args=())
         auto_aiming_thread.daemon = True
         auto_aiming_thread.start()
         print('Auto aiming thread started.')
 
+    def on_exit(self):
+        if not self.if_paused:
+            self.switch_pause_state()
+
     def switch_pause_state(self):
         self.if_paused = not self.if_paused
         if not self.if_paused:
-            self.program_continued.release()
+            self.program_continued.release(2)
         return self.if_paused
 
     def switch_auto_shoot_state(self):
@@ -97,37 +98,31 @@ class DeadEyeCore:
                     # for target in self.new_target_list:
                     #     print(target)
                     self.targets_detected_time = time.time()
-                    self.target_ready.release()
+                    if len(self.new_target_list):
+                        # 利用旧目标与当前目标进行目标位置的优化
+                        self.opt_targets()
+                    else:
+                        self.target_list.clear()
+                    self.target_updated.release()
 
-                    self.cumulative_time += (time.time() - t0)
-                    self.frame_num += 1
-                    if self.cumulative_time >= 1.0:
-                        self.fps = self.frame_num / self.cumulative_time
-                        self.cumulative_time = 0
-                        self.frame_num = 0
-                        if self.fps_displayer:
-                            self.fps_displayer.set(f"{round(self.fps)}")
-                        else:
-                            print('FPS:', self.fps)
+                    fps = 1 / (self.targets_detected_time - t0)
+                    if self.fps_displayer:
+                        self.fps_displayer.set(f"{round(fps)}")
+                    else:
+                        print('FPS:', fps)
                 else:
                     print('Paused.')
-                    self.cumulative_time = 0
-                    self.frame_num = 0
                     break
 
-    def auto_aiming(self):
+    def auto_aim(self):
         while 1:
-            self.target_ready.acquire()
-            if len(self.new_target_list):
-                # 利用旧目标与当前目标进行目标位置的优化
-                self.opt_targets()
+            self.target_updated.acquire()
+            if len(self.target_list):
                 # 自动瞄准
                 if self.if_auto_aim:
-                    self.aim_module.auto_aim(self.target_list)
+                    x_movement, y_movement = self.aim_module.auto_aim(self.target_list)
                 if self.if_auto_shoot:
                     self.aim_module.auto_shoot(self.target_list)
-            # 更新旧目标
-            self.previous_targets_detected_time = self.targets_detected_time
 
     def hungarian_algorithm(self):
         # 匈牙利算法，用于目标匹配
