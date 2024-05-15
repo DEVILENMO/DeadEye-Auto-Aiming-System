@@ -192,6 +192,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         #  This program is for reference only and is prohibited from being used for purposes that may involve illegal
         #  activities, including but not limited to game cheating and visual aiming robots. Users shall bear
         #  corresponding legal responsibilities after implementing relevant algorithms on their own.
+
         return x_r, y_r
 
     @staticmethod

@@ -1,3 +1,6 @@
 .idea
 
 test.py
+weights/apex_v8s.onnx
+weights/apex_v8s.pt
+weights/apex_v8s.trt
