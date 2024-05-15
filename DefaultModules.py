@@ -107,6 +107,10 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         self.previous_distance_y = 0
 
     def auto_shoot(self, target_list: list[Target]) -> None:
+        """
+        DEMO, showing how to implement auto shoot.
+        示例程序，展示如何编写自动扳机。
+        """
         # 自动扳机
         t = time.time()
         if t - self.last_auto_shoot_time < 0.25:
@@ -144,6 +148,10 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         self.clear_pid_history()
 
     def auto_aim(self, target_list: list[Target]) -> tuple[int, int]:
+        """
+        DEMO, showing how to calculate mouse movement with PID algorithm
+        示例程序，作为参考展示了如何用PID来计算鼠标移动参数。
+        """
         mouseX, mouseY = pyautogui.position()
 
         if not len(target_list):
@@ -177,10 +185,13 @@ class DeadEyeAutoAimingModule(AutoAimModule):
                           round((aim_target.left_top[1] + aim_target.right_bottom[1]) * 0.5))
         x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))  # 计算鼠标移动
 
-        # 鼠标操控部分
-        pydirectinput.moveRel(int(x_r * self.aim_sensitive),
-                              int(y_r * self.aim_sensitive),
-                              duration=0.000, relative=True)
+        # Mouse control or something else...
+        #  Todo: 请自己实现对鼠标的控制逻辑。 Implement mouse control logic here.
+        #  本程序仅提供参考,禁止用于包括但不限于游戏作弊、视觉瞄准机器人等可能涉嫌违法的用途中。
+        #  用户在自行实现相关算法后,需要自行承担相应的法律责任。
+        #  This program is for reference only and is prohibited from being used for purposes that may involve illegal
+        #  activities, including but not limited to game cheating and visual aiming robots. Users shall bear
+        #  corresponding legal responsibilities after implementing relevant algorithms on their own.
         return x_r, y_r
 
     @staticmethod
@@ -193,7 +204,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         return nearest_target
 
     def shoot(self):
-        self.mouse_controller.click(mouse.Button.left)
+        pass
 
     def set_pid_parameters(self, p=None, i=None, d=None, rebond_strength=None):
         if p is not None:
