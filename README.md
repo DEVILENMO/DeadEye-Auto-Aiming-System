@@ -96,14 +96,14 @@ The following animation demonstrates the aiming assist effect provided by this p
 
 ### 注意事项
 
-- **注1**：此项目是从之前损坏的项目代码中整合而来，部分功能缺失，例如在屏幕中的众多目标中只追踪其中之一。
-- **注2**：项目仅供学习和测试用途，严禁用于游戏作弊或任何违反游戏使用规则的行为。
+- **注1**：此项目是从之前损坏的项目代码中整合而来，部分功能缺失。
+- **注2**：本项目是一个使用屏幕图像基于目标检测网络进行辅助瞄准的程序,仅作为课程项目,供学习和研究测试使用。严禁将本项目用于游戏作弊、盈利等任何可能涉嫌违法的用途。本程序不提供对鼠标、键盘等输入设备的任何直接控制或互动的代码。其他使用者需要在严格遵守AGPL-3.0许可协议的前提下,合法合规地借鉴本仓库的源代码,不得进行任何违法行为。如有任何违法行为发生,与本项目作者无关,作者保留依法追究相关责任人法律责任的权利。
 - **注3**：2024.4.25，项目已修复了绝大多数错误，并且更换目标检测模块至 Yolov8 版本，使用 .pt 以及 .trt 权重文件进行目标检测并且辅助瞄准测试无误。
 
 ### Precautions
 
-- **Note 1**: This project is integrated from previously damaged project code and some functions were lost, e.g.tracking one target among many targets.
-- **Note 2**: The project is for learning and testing purposes only, and it is strictly forbidden to use it for game cheating or any behavior that violates game usage rules.
+- **Note 1**: This project is integrated from previously damaged project code and some functions were lost.
+- **Note 2**: This project is a program that uses screen images based on an object detection network for assisted aiming, solely as a course project for learning and research testing purposes. It is strictly prohibited to use this project for any potentially illegal purposes such as game cheating or profiteering. This program does not provide any code for direct control or interaction with input devices such as mice and keyboards. Other users must strictly comply with the AGPL-3.0 license agreement and legally and compliantly reference the source code of this repository, and must not engage in any illegal activities. If any illegal activities occur, they are unrelated to the author of this project, and the author reserves the right to legally pursue the legal responsibility of relevant responsible persons.
 - **Note 3**: As of April 25, 2024, the project has fixed most of the errors and has updated the target detection module to the Yolov8 version. It now uses the .pt and .trt weight file for target detection, and the assisted aiming has been tested without issues.
 
 ### 常见问题
