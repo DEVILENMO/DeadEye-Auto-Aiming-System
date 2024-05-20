@@ -27,7 +27,7 @@ class YoloDetector(DetectModule):
             self.model_type = 'pt'
         else:
             print('Loading TensorRT engine...')
-            self.model = TensorRTEngine(model)
+            self.model = Yolov8TensorRTEngine(model)
             self.model_type = 'trt'
 
     def target_detect(self, img) -> list:
@@ -65,6 +65,20 @@ class YoloDetector(DetectModule):
         return results
 
 
+class SimpleMouseController(MouseControlModule):
+    def __init__(self):
+        # mouse controller
+        self.mouse_controller = mouse.Controller()
+
+    def click_left_button(self):
+        # ToDo: You are required to implement a mouse click function yourself
+        pass
+
+    def move_mouse(self, x: int, y: int):
+        # ToDo: You are required to implement a mouse move function yourself
+        pass
+
+
 DEFAULT_P = 0.75
 DEFEULT_I = 0.5
 DEFAULT_D = 0.1
@@ -78,8 +92,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
 
         self.tracking_target_id = None
 
-        # mouse controller
-        self.mouse_controller = mouse.Controller()
+        self.mouse_controller = SimpleMouseController()
 
         # Auto aim settings
         self.auto_aim_range_x = 1.5
@@ -193,6 +206,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         #  activities, including but not limited to game cheating and visual aiming robots. Users shall bear
         #  corresponding legal responsibilities after implementing relevant algorithms on their own.
 
+        self.mouse_controller.move_mouse(int(x_r * self.aim_sensitive), int(y_r * self.aim_sensitive))
         return x_r, y_r
 
     @staticmethod
@@ -205,7 +219,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         return nearest_target
 
     def shoot(self):
-        pass
+        self.mouse_controller.click_left_button()
 
     def set_pid_parameters(self, p=None, i=None, d=None, rebond_strength=None):
         if p is not None:

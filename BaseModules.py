@@ -4,6 +4,7 @@ import pyautogui
 
 from MathTools import KalmanFilter
 
+
 class Target:
     def __init__(self, label, index, left_top, right_bottom):
         self.label = label
@@ -24,7 +25,6 @@ class Target:
 
     def __repr__(self):
         return f'label: {self.label}, id: {self.index}, box: {self.left_top}, {self.right_bottom}'
-
 
 
 class DetectModule:
@@ -59,3 +59,14 @@ class AutoAimModule:
     def on_exit(self):
         """This function is called when the program is closed."""
         pass
+
+
+class MouseControlModule:
+    def __init__(self):
+        raise NotImplementedError('Subclass must implement this method.')
+
+    def click_left_button(self):
+        raise NotImplementedError('Subclass must implement this method.')
+
+    def move_mouse(self, x: int, y: int):
+        raise NotImplementedError('Subclass must implement this method.')
