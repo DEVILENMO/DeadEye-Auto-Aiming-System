@@ -9,7 +9,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## 特性
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
-- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .onnx /.trt 模型进行精确的目标检测。
+- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .trt 模型进行精确的目标检测。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
 - **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
@@ -18,7 +18,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ## Features
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
-- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .onnx or .trt formats.
+- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .trt formats.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
@@ -35,7 +35,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 ### 目标检测模块 (DetectModule)
 
-- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.onnx / .trt` 模型的基于 TensorRT 的部署方式进行高效检测。
+- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.trt` 模型的基于 TensorRT 的部署方式进行高效检测。
 
 ### 目标追踪
 
@@ -46,6 +46,10 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 - **DeadEyeAutoAimingModule**: 基础的辅助瞄准模块类，实现了核心的瞄准功能。
 - **定制扩展**: 允许用户继承或修改基类，创建个性化的辅助瞄准模块。
 
+### 鼠标控制模块（MouseControlModule）
+- **SimpleMouseController**: 鼠标控制类实例，`DeadEyeAutoAimingModule`类会在 `__init__` 时实例化这个类并用这个类来控制鼠标。用户需要自己实现这个类里控制鼠标两个函数 `click_left_button` 以及 `move_mouse` ，分别对应点击鼠标左键以及移动鼠标。
+- **定制扩展**: 用户可以自由实现这个类，即可轻松使用树莓派或其他设备来控制鼠标，此外，作者并没有为用户实现这个类的两个控制鼠标的函数功能以及其他硬件操控功能，用户编程实现后对应的法律风险需要用户自己承担。
+
 ## Technological Path
 
 ### Screenshot Module (ScreenShotHelper)
@@ -54,7 +58,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 ### Target Detection Module (YoloDetector)
 - **Model Compatibility**: Supports direct detection using `.pt` model files, offering flexibility in model training and deployment.
-- **Efficient Detection**: Incorporates `.onnx` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
+- **Efficient Detection**: Incorporates `.trt` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
 
 ### Target Tracking
 - **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
@@ -63,6 +67,10 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 ### Aiming Module (DeadEyeAutoAimingModule)
 - **Core Aiming Functions**: Implements the fundamental features necessary for assisted aiming, such as target locking and trajectory adjustment.
 - **Customization and Extension**: Designed with extensibility in mind, allowing users to inherit from or modify the base class to create customized aiming modules tailored to specific requirements.
+
+### Mouse control module (MouseControlModule)
+- **SimpleMouseController**: Mouse control class instance. The `DeadEyeAutoAimingModule` class will instantiate this class during `__init__` and use this class to control the mouse. Users need to implement the two mouse control functions in this class, `click_left_button` and `move_mouse`, which correspond to clicking the left mouse button and moving the mouse respectively.
+- **Customized Extension**: Users can freely implement this class, and can easily use Raspberry Pi or other devices to control the mouse. In addition, the author has not implemented the two mouse control functions and other hardware of this class for users. The corresponding legal risks after the control function and user programming are implemented need to be borne by the user himself.
 
 ## 使用指南
 
