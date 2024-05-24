@@ -179,7 +179,7 @@ class DeadEyeAutoAimingModule(AutoAimModule):
             self.set_tracking_target_id(aim_target.index)
         else:
             for target in target_list:
-                if target == self.tracking_target_id:
+                if target.index == self.tracking_target_id:
                     aim_target = target
                     break
             if aim_target is None:
@@ -188,8 +188,8 @@ class DeadEyeAutoAimingModule(AutoAimModule):
 
         width = aim_target.right_bottom[0] - aim_target.left_top[0]
         height = aim_target.right_bottom[1] - aim_target.left_top[1]
-        distance_x = (aim_target.left_top[0] + aim_target.right_bottom[0]) / 2 - rel_mouse_x
-        distance_y = (aim_target.left_top[1] + aim_target.right_bottom[1]) / 2 - rel_mouse_y
+        distance_x = abs((aim_target.left_top[0] + aim_target.right_bottom[0]) / 2 - rel_mouse_x)
+        distance_y = abs((aim_target.left_top[1] + aim_target.right_bottom[1]) / 2 - rel_mouse_y)
         if distance_x > width * self.auto_aim_range_x or distance_y > height * self.auto_aim_range_y:
             return 0, 0
         # print('最近目标：', nearest_target)

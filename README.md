@@ -47,7 +47,7 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 - **定制扩展**: 允许用户继承或修改基类，创建个性化的辅助瞄准模块。
 
 ### 鼠标控制模块（MouseControlModule）
-- **SimpleMouseController**: 鼠标控制类实例，`DeadEyeAutoAimingModule`类会在 `__init__` 时实例化这个类并用这个类来控制鼠标。用户需要自己实现这个类里控制鼠标两个函数 `click_left_button` 以及 `move_mouse` ，分别对应点击鼠标左键以及移动鼠标。
+- **SimpleMouseController**: 鼠标控制类实例， `DeadEyeAutoAimingModule` 类会在 `__init__` 时实例化这个类并用这个类来控制鼠标。用户需要自己实现这个类里控制鼠标两个函数 `click_left_button` 以及 `move_mouse` ，分别对应点击鼠标左键以及移动鼠标。
 - **定制扩展**: 用户可以自由实现这个类，即可轻松使用树莓派或其他设备来控制鼠标，此外，作者并没有为用户实现这个类的两个控制鼠标的函数功能以及其他硬件操控功能，用户编程实现后对应的法律风险需要用户自己承担。
 
 ## Technological Path
@@ -78,9 +78,9 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 1. 执行 `main.py` 文件启动程序，操作UI或使用快捷键进行识别系统的暂停、继续或者开启自动瞄准、自动扳机等。
 2. 程序运行中可以使用以下默认快捷键：
-   - `P`: 暂停/继续程序
-   - `O`: 完全结束程序
-   - `鼠标左键`: 按下时开启自动瞄准
+   - `P` : 暂停/继续程序
+   - `O` : 完全结束程序
+   - `鼠标左键` : 按下时开启自动瞄准
 
 ## Usage Guide
 
@@ -88,9 +88,9 @@ The DeadEye Aiming Assist System is a high-performance image aiming tool designe
 
 1. Execute the `main.py` file to start the program. Use the UI or hotkeys to pause, resume, or enable features like auto-aiming and auto-triggering.
 2. While the program is running, you can use the following default hotkeys:
-   - `P`: Pause/Resume the program
-   - `O`: Completely exit the program
-   - `Left Mouse Button`: Enable auto-aiming while pressed
+   - `P` : Pause/Resume the program
+   - `O` : Completely exit the program
+   - `Left Mouse Button` : Enable auto-aiming while pressed
 
 ### 效果演示
 
