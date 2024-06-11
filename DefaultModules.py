@@ -73,10 +73,12 @@ class SimpleMouseController(MouseControlModule):
 
     def click_left_button(self):
         # ToDo: You are required to implement a mouse click function yourself
+        # Warning: You are not allowed to use this project for any unethical or legal behavior under any circumstances
         print('You are required to implement a mouse click function yourself')
 
     def move_mouse(self, x: int, y: int):
         # ToDo: You are required to implement a mouse move function yourself
+        # Warning: You are not allowed to use this project for any unethical or legal behavior under any circumstances
         print('You are required to implement a mouse move function yourself')
 
 
