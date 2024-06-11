@@ -85,16 +85,16 @@ class DeadEyeCore:
                     screen_shot = self.screen_shot_camera.capture_screen_shot()
                     if screen_shot is None:
                         continue
-                    # t1 = time.time()
-                    # print('Screen shot time cost:', t1 - t0)
-                    # print('Screen shot size:', screen_shot.shape)
+                    t1 = time.time()
+                    print('Screen shot time cost:', t1 - t0)
+                    print('Screen shot size:', screen_shot.shape)
                     if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
                         screen_shot = cv2.cvtColor(screen_shot, cv2.COLOR_BGR2RGB)
                     # cv2.imshow('screen_shot', screen_shot)
                     # cv2.waitKey(0)
 
                     self.new_target_list = self.detect_module.target_detect(screen_shot)
-                    # print(f'Detected {len(self.new_target_list)} targets.')
+                    print(f'Detected {len(self.new_target_list)} targets.')
                     # for target in self.new_target_list:
                     #     print(target)
                     self.targets_detected_time = time.time()

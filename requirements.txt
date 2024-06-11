@@ -1,4 +1,5 @@
 appdirs==1.4.4
+begins==0.9
 certifi==2024.6.2
 charset-normalizer==3.3.2
 colorama==0.4.6
@@ -6,7 +7,9 @@ coloredlogs==15.0.1
 comtypes==1.4.4
 contourpy==1.2.1
 cycler==0.12.1
+Cython==3.0.10
 dxcam==0.0.5
+easycython==1.0.7
 filelock==3.14.0
 flatbuffers==24.3.25
 fonttools==4.53.0
