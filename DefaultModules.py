@@ -68,15 +68,16 @@ class YoloDetector(DetectModule):
 class SimpleMouseController(MouseControlModule):
     def __init__(self):
         # mouse controller
+        super(SimpleMouseController).__init__()
         self.mouse_controller = mouse.Controller()
 
     def click_left_button(self):
         # ToDo: You are required to implement a mouse click function yourself
-        pass
+        print('You are required to implement a mouse click function yourself')
 
     def move_mouse(self, x: int, y: int):
         # ToDo: You are required to implement a mouse move function yourself
-        pass
+        print('You are required to implement a mouse move function yourself')
 
 
 DEFAULT_P = 0.75

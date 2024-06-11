@@ -13,15 +13,30 @@ class Target:
         self.right_bottom_kf = KalmanFilter(right_bottom[0], right_bottom[1])
         self.left_top = left_top
         self.right_bottom = right_bottom
-        self.predict_time = 1
+        self.update_time = 0
 
     def update_position(self, left_top, right_bottom):
+        # 直接更新
         self.left_top = left_top
         self.right_bottom = right_bottom
-        # predicted_left_top = self.left_top_kf.predict(left_top[0], left_top[1])
-        # self.left_top = (0.5 * (predicted_left_top[0] + left_top[0]), 0.5 * (predicted_left_top[1] + left_top[1]))
-        # predicted_right_bottom = self.right_bottom_kf.predict(right_bottom[0], right_bottom[1])
-        # self.right_bottom = (0.5 * (predicted_right_bottom[0] + right_bottom[0]), 0.5 * (predicted_right_bottom[1] + right_bottom[1]))
+
+        # 卡尔曼滤波
+        # self.update_time += 1
+        # alpha = min(0.5, self.update_time / 100.0)
+        # # 预测并校正左上角位置
+        # self.left_top_kf.predict()
+        # corrected_left_top = self.left_top_kf.correct(left_top[0], left_top[1])
+        # self.left_top = (
+        #     (1 - alpha) * left_top[0] + alpha * corrected_left_top[0],
+        #     (1 - alpha) * left_top[1] + alpha * corrected_left_top[1]
+        # )
+        # # 预测并校正右下角位置
+        # self.right_bottom_kf.predict()
+        # corrected_right_bottom = self.right_bottom_kf.correct(right_bottom[0], right_bottom[1])
+        # self.right_bottom = (
+        #     (1 - alpha) * right_bottom[0] + alpha * corrected_right_bottom[0],
+        #     (1 - alpha) * right_bottom[1] + alpha * corrected_right_bottom[1]
+        # )
 
     def __repr__(self):
         return f'label: {self.label}, id: {self.index}, box: {self.left_top}, {self.right_bottom}'

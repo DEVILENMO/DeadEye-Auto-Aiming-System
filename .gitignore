@@ -1,6 +1,10 @@
 .idea
+build
 
 test.py
+memo.txt
+
 weights/apex_v8s.onnx
 weights/apex_v8s.pt
 weights/apex_v8s.trt
+weights/apex_v8s_fp32.trt
