@@ -94,7 +94,7 @@ class DeadEyeCore:
                     # cv2.waitKey(0)
 
                     self.new_target_list = self.detect_module.target_detect(screen_shot)
-                    print(f'Detected {len(self.new_target_list)} targets.')
+                    # print(f'Detected {len(self.new_target_list)} targets.')
                     for target in self.new_target_list:
                         print(target)
                     self.targets_detected_time = time.time()

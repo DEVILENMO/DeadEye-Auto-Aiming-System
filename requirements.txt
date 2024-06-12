@@ -14,6 +14,7 @@ filelock==3.14.0
 flatbuffers==24.3.25
 fonttools==4.53.0
 fsspec==2024.6.0
+huggingface-hub==0.23.3
 humanfriendly==10.0
 idna==3.7
 intel-openmp==2021.4.0
@@ -28,6 +29,7 @@ mpmath==1.3.0
 mss==9.0.1
 networkx==3.3
 numpy==1.26.4
+onnx==1.16.1
 onnxruntime==1.18.0
 opencv-python==4.10.0.82
 packaging==24.1
@@ -54,16 +56,21 @@ pytweening==1.2.0
 pytz==2024.1
 pywin32==306
 PyYAML==6.0.1
+regex==2024.5.15
 requests==2.32.3
+safetensors==0.4.3
 scipy==1.13.1
 seaborn==0.13.2
 six==1.16.0
 sympy==1.12.1
 tbb==2021.12.0
 tensorrt @ file:///C:/Users/DEVIL/Desktop/app/TensorRT-8.6.1.6/python/tensorrt-8.6.1-cp311-none-win_amd64.whl#sha256=0c5c513d82a53a7d3e08014f81f17a536828c8d0c1ebc1b392362f538f65fc80
-torch==2.3.1
-torchvision==0.18.1
+tokenizers==0.19.1
+torch==2.3.1+cu121
+torchaudio==2.3.1+cu121
+torchvision==0.18.1+cu121
 tqdm==4.66.4
+transformers==4.41.2
 typing_extensions==4.12.2
 tzdata==2024.1
 ultralytics==8.2.31
