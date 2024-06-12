@@ -37,7 +37,7 @@ class YoloDetector(DetectModule):
         results = []
         if self.model_type == 'pt':
             # h, w = img.shape[:2]
-            result = self.model(img, verbose=False, half=False, iou=0.8, conf=0.75)
+            result = self.model(img, verbose=False, half=True, iou=0.8, conf=0.75)
             detections = result[0]
 
             # 提取检测结果中的边界框、类别标签和置信度
@@ -69,7 +69,7 @@ class SimpleMouseController(MouseControlModule):
     def __init__(self):
         # mouse controller
         super(SimpleMouseController).__init__()
-        self.mouse_controller = mouse.Controller()
+        self.mc = mouse.Controller()
 
     def click_left_button(self):
         # ToDo: You are required to implement a mouse click function yourself
@@ -82,10 +82,10 @@ class SimpleMouseController(MouseControlModule):
         print('You are required to implement a mouse move function yourself')
 
 
-DEFAULT_P = 0.75
-DEFEULT_I = 0.5
-DEFAULT_D = 0.1
-DEFAULT_R = 0.9
+DEFAULT_P = 0.5
+DEFEULT_I = 0.2
+DEFAULT_D = 0.05
+DEFAULT_R = 0.5
 
 
 class DeadEyeAutoAimingModule(AutoAimModule):
@@ -200,16 +200,17 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         position_fixed = (round((aim_target.left_top[0] + aim_target.right_bottom[0]) * 0.5),
                           round((aim_target.left_top[1] + aim_target.right_bottom[1]) * 0.5))
         x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))  # 计算鼠标移动
+        x_r = int(x_r * self.aim_sensitive)
+        y_r = int(y_r * self.aim_sensitive)
 
         # Mouse control or something else...
-        #  Todo: 请自己实现对鼠标的控制逻辑。 Implement mouse control logic here.
+        #  Todo: 请自己实现 mouse_controller 中对鼠标的控制逻辑。 Implement mouse control logic in mouse controller.
         #  本程序仅提供参考,禁止用于包括但不限于游戏作弊、视觉瞄准机器人等可能涉嫌违法的用途中。
         #  用户在自行实现相关算法后,需要自行承担相应的法律责任。
         #  This program is for reference only and is prohibited from being used for purposes that may involve illegal
         #  activities, including but not limited to game cheating and visual aiming robots. Users shall bear
         #  corresponding legal responsibilities after implementing relevant algorithms on their own.
-
-        self.mouse_controller.move_mouse(int(x_r * self.aim_sensitive), int(y_r * self.aim_sensitive))
+        self.mouse_controller.move_mouse(x_r, y_r)
         return x_r, y_r
 
     @staticmethod
@@ -222,6 +223,12 @@ class DeadEyeAutoAimingModule(AutoAimModule):
         return nearest_target
 
     def shoot(self):
+        #  Todo: 请自己实现 mouse_controller 中对鼠标的控制逻辑。 Implement mouse control logic in mouse controller.
+        #  本程序仅提供参考,禁止用于包括但不限于游戏作弊、视觉瞄准机器人等可能涉嫌违法的用途中。
+        #  用户在自行实现相关算法后,需要自行承担相应的法律责任。
+        #  This program is for reference only and is prohibited from being used for purposes that may involve illegal
+        #  activities, including but not limited to game cheating and visual aiming robots. Users shall bear
+        #  corresponding legal responsibilities after implementing relevant algorithms on their own.
         self.mouse_controller.click_left_button()
 
     def set_pid_parameters(self, p=None, i=None, d=None, rebond_strength=None):

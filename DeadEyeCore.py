@@ -85,7 +85,7 @@ class DeadEyeCore:
                     screen_shot = self.screen_shot_camera.capture_screen_shot()
                     if screen_shot is None:
                         continue
-                    # t1 = time.time()
+                    t1 = time.time()
                     # print('Screen shot time cost:', t1 - t0)
                     # print('Screen shot size:', screen_shot.shape)
                     if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
@@ -94,9 +94,9 @@ class DeadEyeCore:
                     # cv2.waitKey(0)
 
                     self.new_target_list = self.detect_module.target_detect(screen_shot)
-                    # print(f'Detected {len(self.new_target_list)} targets.')
-                    # for target in self.new_target_list:
-                    #     print(target)
+                    print(f'Detected {len(self.new_target_list)} targets.')
+                    for target in self.new_target_list:
+                        print(target)
                     self.targets_detected_time = time.time()
                     if len(self.new_target_list):
                         # 利用旧目标与当前目标进行目标位置的优化
@@ -105,7 +105,10 @@ class DeadEyeCore:
                         self.target_list.clear()
                     self.target_updated.release()
 
-                    fps = 1 / (self.targets_detected_time - t0)
+                    # print('Detect time cost:', self.targets_detected_time - t1)
+                    total_time_cost = self.targets_detected_time - t0
+                    # print('Total time cost:', total_time_cost)
+                    fps = 1 / total_time_cost
                     if self.fps_displayer:
                         self.fps_displayer.set(f"{round(fps)}")
                     else:

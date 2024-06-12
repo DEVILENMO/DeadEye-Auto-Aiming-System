@@ -322,16 +322,18 @@ Welcome to use the files in this repository. Before using any files in this repo
 在开发本项目的过程中,我参考了以下优秀的开源项目。在此对这些项目的贡献者表示感谢!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): YOLOv7 的官方实现。
-- [Ultralytics Assets](https://github.com/ultralytics/assets): Ultralytics 的资源库,包含各种 YOLO 模型的训练数据、权重文件和配置文件。
-- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目,帮助我优化了模型的推理性能。
+- [YOLOv8](https://github.com/ultralytics/ultralytics): YOLOv8 的官方实现。
+- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目。
+- [wang2024yolov10](https://github.com/THU-MIG/yolov10): YOLOv10 的官方实现。
 
 ## Reference Projects
 
 During the development of this project, I referenced the following excellent open-source projects. I would like to express our gratitude to the contributors of these projects!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): The official implementation of YOLOv7.
-- [Ultralytics Assets](https://github.com/ultralytics/assets): The resource repository of Ultralytics, containing training data, weight files, and configuration files for various YOLO models.
-- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): A comprehensive project for deploying YOLO series models with TensorRT, which helped us optimize the inference performance of the models.
+- [YOLOv8](https://github.com/ultralytics/ultralytics): The official implementation of YOLOv8.
+- [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): A comprehensive project for deploying YOLO series models with TensorRT.
+- [wang2024yolov10](https://github.com/THU-MIG/yolov10): The official implementation of YOLOv10.
 
 ## 开源许可
 

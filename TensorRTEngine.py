@@ -1,6 +1,8 @@
 # coding: utf-8
 # cython: language_level=3
+import os
 from collections import OrderedDict, namedtuple
+from enum import Enum
 
 import cv2
 import numpy as np
@@ -16,46 +18,113 @@ import torch
 import pycuda.driver as cuda
 import pycuda.autoinit
 import matplotlib.pyplot as plt
+from ultralytics import YOLO
+
+
+class ModelType(Enum):
+    TRT = 0
+    ENGINE = 1
 
 
 class Yolov8TensorRTEngine(object):
-    def __init__(self, engine_path):
-        self.cuda_context_for_multiple_threading = cuda.Device(0).make_context()
-        self.mean = None
-        self.std = None
+    def __init__(self, model_path):
+        # 判断输入的模型文件后缀
+        _, ext = os.path.splitext(model_path)
+        if ext == '.trt':
+            self.model_type = ModelType.TRT
+        elif ext == '.engine':
+            self.model_type = ModelType.ENGINE
+        else:
+            raise ValueError(f'Unsupported model file extension: {ext}')
 
-        # Todo: If you choose to use your .trt weight file, you should modify the class info here.
+        # Todo: If you choose to use your .trt / .engine weight file, you should modify the class info here.
         self.class_num = 3
-        self.class_name_list = ['ally', 'enemy', 'bot']
+        self.class_name_list = ['ally', 'enemy', 'tag']
         print(f'Class number: {self.class_num}, Class name: {self.class_name_list}')
 
-        logger = trt.Logger(trt.Logger.WARNING)
-        logger.min_severity = trt.Logger.Severity.ERROR
-        runtime = trt.Runtime(logger)
-        trt.init_libnvinfer_plugins(logger, '')  # initialize TensorRT plugins
-        with open(engine_path, "rb") as f:
-            serialized_engine = f.read()
-        engine = runtime.deserialize_cuda_engine(serialized_engine)
-        self.imgsz = engine.get_binding_shape(0)[2:]  # get the read shape of model, in case user input it wrong
-        self.context = engine.create_execution_context()
-        self.inputs, self.outputs, self.bindings = [], [], []
-        self.stream = cuda.Stream()
-        for binding in engine:
-            size = trt.volume(engine.get_binding_shape(binding))
-            dtype = trt.nptype(engine.get_binding_dtype(binding))
-            host_mem = cuda.pagelocked_empty(size, dtype, mem_flags=cuda.host_alloc_flags.PORTABLE)
-            device_mem = cuda.mem_alloc(host_mem.nbytes)
-            self.bindings.append(int(device_mem))
-            if engine.binding_is_input(binding):
-                self.inputs.append({'host': host_mem, 'device': device_mem})
-            else:
-                self.outputs.append({'host': host_mem, 'device': device_mem})
+        if self.model_type == ModelType.TRT:
+            self.cuda_context_for_multiple_threading = cuda.Device(0).make_context()
+            self.mean = None
+            self.std = None
+
+            logger = trt.Logger(trt.Logger.WARNING)
+            logger.min_severity = trt.Logger.Severity.ERROR
+            runtime = trt.Runtime(logger)
+            trt.init_libnvinfer_plugins(logger, '')  # initialize TensorRT plugins
+            with open(model_path, "rb") as f:
+                serialized_engine = f.read()
+            engine = runtime.deserialize_cuda_engine(serialized_engine)
+            self.imgsz = engine.get_binding_shape(0)[2:]  # get the read shape of model, in case user input it wrong
+            self.context = engine.create_execution_context()
+            self.inputs, self.outputs, self.bindings = [], [], []
+            self.stream = cuda.Stream()
+            for binding in engine:
+                size = trt.volume(engine.get_binding_shape(binding))
+                dtype = trt.nptype(engine.get_binding_dtype(binding))
+                host_mem = cuda.pagelocked_empty(size, dtype, mem_flags=cuda.host_alloc_flags.PORTABLE)
+                device_mem = cuda.mem_alloc(host_mem.nbytes)
+                self.bindings.append(int(device_mem))
+                if engine.binding_is_input(binding):
+                    self.inputs.append({'host': host_mem, 'device': device_mem})
+                else:
+                    self.outputs.append({'host': host_mem, 'device': device_mem})
+        elif self.model_type == ModelType.ENGINE:
+            self.model = YOLO(model_path)
 
     def on_exit(self):
         print('Destroying TensorRTEngine...')
-        self.cuda_context_for_multiple_threading.pop()
+        if self.model_type == ModelType.TRT:
+            self.cuda_context_for_multiple_threading.pop()
 
-    def _infer(self, img):
+    def inference(self, origin_img, conf=0.5, end2end=True):
+        if self.model_type == ModelType.TRT:
+            img, ratio = preproc(origin_img, self.imgsz, self.mean, self.std)
+            data = self._trt_infer(img)
+            if end2end:
+                num, final_boxes, final_scores, final_cls_inds = data
+                final_boxes = np.reshape(final_boxes / ratio, (-1, 4))
+                dets = np.concatenate([final_boxes[:num[0]], np.array(final_scores)[:num[0]].reshape(-1, 1),
+                                       np.array(final_cls_inds)[:num[0]].reshape(-1, 1)], axis=-1)
+            else:
+                predictions = np.reshape(data, (1, -1, int(5 + self.class_num)))[0]
+                dets = self._trt_postprocess(predictions, ratio)
+
+            targets = []
+            if dets is not None:
+                final_boxes, final_scores, final_cls_inds = dets[:,
+                                                            :4], dets[:, 4], dets[:, 5]
+                class_names = self.class_name_list
+                boxes = final_boxes[final_scores > conf]
+                classes = final_cls_inds[final_scores > conf]
+
+                for box, cls_idx in zip(boxes, classes):
+                    x1, y1, x2, y2 = map(int, box)
+                    class_name = class_names[int(cls_idx)]
+                    target_info = [class_name, (x1, y1), (x2, y2)]
+                    targets.append(target_info)
+            return targets
+        elif self.model_type == ModelType.ENGINE:
+            results = self.model(origin_img)
+            output_results = []
+
+            for result in results:
+                boxes = result.boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0]
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+                    conf = box.conf[0]
+                    cls = int(box.cls[0])
+                    class_name = result.names[cls]
+
+                    if conf >= conf:
+                        output_result = (class_name, (x1, y1), (x2, y2))
+                        output_results.append(output_result)
+            return output_results
+        else:
+            return []
+
+    def _trt_infer(self, img):
         self.cuda_context_for_multiple_threading.push()
         temp_host_mem = np.ravel(img)
         np.copyto(self.inputs[0]['host'], temp_host_mem)
@@ -76,34 +145,41 @@ class Yolov8TensorRTEngine(object):
         self.cuda_context_for_multiple_threading.pop()
         return data
 
-    def inference(self, origin_img, conf=0.5, end2end=False):
-        img, ratio = preproc(origin_img, self.imgsz, self.mean, self.std)
-        data = self._infer(img)
-        if end2end:
-            num, final_boxes, final_scores, final_cls_inds = data
-            final_boxes = np.reshape(final_boxes / ratio, (-1, 4))
-            dets = np.concatenate([final_boxes[:num[0]], np.array(final_scores)[:num[0]].reshape(-1, 1),
-                                   np.array(final_cls_inds)[:num[0]].reshape(-1, 1)], axis=-1)
-        else:
-            predictions = np.reshape(data, (1, -1, int(5 + self.class_num)))[0]
-            dets = self.postprocess(predictions, ratio)
+    @staticmethod
+    def _trt_postprocess(predictions, ratio):
+        boxes = predictions[:, :4]
+        scores = predictions[:, 4:5] * predictions[:, 5:]
+        boxes_xyxy = np.ones_like(boxes)
+        boxes_xyxy[:, 0] = boxes[:, 0] - boxes[:, 2] / 2.
+        boxes_xyxy[:, 1] = boxes[:, 1] - boxes[:, 3] / 2.
+        boxes_xyxy[:, 2] = boxes[:, 0] + boxes[:, 2] / 2.
+        boxes_xyxy[:, 3] = boxes[:, 1] + boxes[:, 3] / 2.
+        boxes_xyxy /= ratio
+        dets = multiclass_nms(boxes_xyxy, scores, nms_thr=0.45, score_thr=0.1)
+        return dets
 
-        targets = []
-        if dets is not None:
-            final_boxes, final_scores, final_cls_inds = dets[:,
-                                                        :4], dets[:, 4], dets[:, 5]
-            class_names = self.class_name_list
-            boxes = final_boxes[final_scores > conf]
-            classes = final_cls_inds[final_scores > conf]
+    def _engine_infer(self, img):
+        self.cuda_context_for_multiple_threading.push()
+        temp_host_mem = np.ravel(img)
+        np.copyto(self.inputs[0]['host'], temp_host_mem)
+        for inp in self.inputs:
+            cuda.memcpy_htod_async(inp['device'], inp['host'], self.stream)
 
-            for box, cls_idx in zip(boxes, classes):
-                x1, y1, x2, y2 = map(int, box)
-                class_name = class_names[int(cls_idx)]
-                target_info = [class_name, (x1, y1), (x2, y2)]
-                targets.append(target_info)
-        return targets
+        self.context.execute_async_v2(
+            bindings=self.bindings,
+            stream_handle=self.stream.handle)
 
-    def postprocess(self, predictions, ratio):
+        for out in self.outputs:
+            cuda.memcpy_dtoh_async(out['host'], out['device'], self.stream)
+
+        self.stream.synchronize()
+
+        data = [out['host'] for out in self.outputs]
+        self.cuda_context_for_multiple_threading.pop()
+        return data
+
+    @staticmethod
+    def _engine_postprocess(predictions, ratio):
         boxes = predictions[:, :4]
         scores = predictions[:, 4:5] * predictions[:, 5:]
         boxes_xyxy = np.ones_like(boxes)

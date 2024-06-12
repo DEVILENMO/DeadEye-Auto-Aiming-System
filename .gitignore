@@ -8,5 +8,6 @@ weights/apex_v8s.onnx
 weights/apex_v8s.pt
 weights/apex_v8s.trt
 weights/apex_v8s_fp32.trt
+weights/apex_v8s.engine
 
 *.pyd
