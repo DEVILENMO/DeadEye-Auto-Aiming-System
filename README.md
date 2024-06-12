@@ -2,9 +2,9 @@
 
 <img src="DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
 
-DeadEye 辅助瞄准系统是一款高性能的图像辅助瞄准工具，旨在通过图像处理和目标追踪技术提高射击精度。该系统通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。
+DeadEye 目标追踪系统是一款高性能的图像辅助目标追踪工具，作为样例提供了FPS游戏中目标追踪以及对应的瞄准效果演示，示例程序通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。除此以外，我还将这个系统应用在光学控制、监控目标追踪中，但是不给出示例程序，用户可以通过简单的修改对应模块来将这个系统应用在不同领域中。
 
-The DeadEye Aiming Assist System is a high-performance image aiming tool designed to improve shooting accuracy through image processing and target tracking technology. The system analyzes screen captures to detect and track targets, and ultimately facilitates aiming and triggers actions through simulated operations.
+DeadEye target tracking system is a high-performance image-assisted target tracking tool. As an example, it provides a demonstration of target tracking and corresponding aiming effects in FPS games. The sample program analyzes screenshots, detects and tracks targets, and finally implements assisted aiming and automatic trigger functions through simulated operations. In addition, I also apply this system to optical control and monitoring target tracking, but I will not provide sample programs. Users can apply this system in different fields by simply modifying the corresponding modules.
 
 ## 特性
 
