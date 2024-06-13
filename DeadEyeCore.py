@@ -27,7 +27,6 @@ class DeadEyeCore:
         self.target_list = []
         self.previous_targets_detected_time = None
         self.new_target_list = []
-        self.targets_detected_time = None
         self.target_num = 0  # total number of targets
 
         # fps
@@ -41,8 +40,6 @@ class DeadEyeCore:
         self.update_image = threading.Semaphore(0)
         self.image_updated = threading.Semaphore(0)
         self.target_updated = threading.Semaphore(0)
-        self.camera_update_interval = None
-        self.target_detect_time_cost = None
 
         # resolution
         user32 = windll.user32
@@ -104,11 +101,8 @@ class DeadEyeCore:
                         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                     self.image = image
                     self.image_updated.release()
-                    image_update_time = time.time()
-                    if self.image_update_time is not None:
-                        self.camera_update_interval = image_update_time - self.image_update_time
-                    self.image_update_time = image_update_time
-                    print(f'Screen shot time cost: {self.image_update_time - t0}s.')
+                    self.image_update_time = time.time()
+                    # print(f'Screen shot time cost: {self.image_update_time - t0}s.')
                     # print('Screen shot size:', image.shape)
                     # cv2.imshow('image', image)
                     # cv2.waitKey(0)
@@ -122,26 +116,21 @@ class DeadEyeCore:
             self.image_updated.acquire()
             t0 = time.time()
             image_update_time = self.image_update_time
-            print(f'Using image update at {image_update_time - t0}s ago.')
+            # print(f'Using image update at {t0 - image_update_time}s ago.')
             image = self.image
             self.image = None
             self.update_image.release()
             self.new_target_list = self.detect_module.target_detect(image)
-            print(f'Detected {len(self.new_target_list)} targets.')
+            # print(f'Detected {len(self.new_target_list)} targets.')
             for target in self.new_target_list:
                 print(target)
-            self.targets_detected_time = time.time()
-            if len(self.new_target_list):
-                # 利用旧目标与当前目标进行目标位置的优化
-                self.opt_targets()
-            else:
-                self.target_list.clear()
+            targets_detected_time = time.time()
             self.target_updated.release()
 
-            self.target_detect_time_cost = self.targets_detected_time - t0
-            print(f'Detect time cost: {self.target_detect_time_cost}s.')
-            total_time_cost = self.targets_detected_time - image_update_time
-            print(f'Total time cost: {total_time_cost}.')
+            target_detect_time_cost = time.time() - t0
+            # print(f'Detect time cost: {target_detect_time_cost}s.')
+            total_time_cost = targets_detected_time - image_update_time
+            # print(f'Total time cost: {total_time_cost}.')
             current_time = time.time()
             if current_time - self.fps_timer >= 1:
                 fps = self.fps_counter / (current_time - self.fps_timer)
@@ -157,6 +146,11 @@ class DeadEyeCore:
     def auto_aim(self):
         while 1:
             self.target_updated.acquire()
+            if len(self.new_target_list):
+                # 利用旧目标与当前目标进行目标位置的优化
+                self.opt_targets()
+            else:
+                self.target_list.clear()
             if len(self.target_list):
                 # 自动瞄准
                 if self.if_auto_aim:
