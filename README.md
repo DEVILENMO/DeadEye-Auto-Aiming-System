@@ -9,7 +9,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ## 特性
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
-- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于.pt权重文件的直接检测或使用 TensorRT 部署后的 .trt 模型进行精确的目标检测。
+- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于 `.pt` 权重文件的直接检测或使用 TensorRT 部署后的 `.trt` / `.engine` 模型进行精确的目标检测。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
 - **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
@@ -18,7 +18,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ## Features
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
-- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using .pt weight files or precise target detection using deployed TensorRT models with .trt formats.
+- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using `.pt` weight files or precise target detection using deployed TensorRT models with `.trt` / `.engine` formats.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
 - **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
@@ -35,7 +35,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ### 目标检测模块 (DetectModule)
 
-- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.trt` 模型的基于 TensorRT 的部署方式进行高效检测。
+- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.trt` / `.engine` 模型的基于 TensorRT 的部署方式进行高效检测。
 
 ### 目标追踪
 
@@ -58,7 +58,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ### Target Detection Module (YoloDetector)
 - **Model Compatibility**: Supports direct detection using `.pt` model files, offering flexibility in model training and deployment.
-- **Efficient Detection**: Incorporates `.trt` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
+- **Efficient Detection**: Incorporates `.trt` / `.engine` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
 
 ### Target Tracking
 - **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.

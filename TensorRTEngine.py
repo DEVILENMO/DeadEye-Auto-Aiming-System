@@ -69,7 +69,7 @@ class Yolov8TensorRTEngine(object):
                 else:
                     self.outputs.append({'host': host_mem, 'device': device_mem})
         elif self.model_type == ModelType.ENGINE:
-            self.model = YOLO(model_path)
+            self.model = YOLO(model_path, task='detect')
 
     def on_exit(self):
         print('Destroying TensorRTEngine...')

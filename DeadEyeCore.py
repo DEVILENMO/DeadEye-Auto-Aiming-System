@@ -23,7 +23,7 @@ class DeadEyeCore:
         self.if_auto_shoot = False  # auto shoot state
         self.if_auto_aim = False  # auto aim state
 
-        # target datas
+        # target data
         self.target_list = []
         self.previous_targets_detected_time = None
         self.new_target_list = []
@@ -31,11 +31,18 @@ class DeadEyeCore:
         self.target_num = 0  # total number of targets
 
         # fps
+        self.image_update_time = None
+        self.fps_timer = time.time()
+        self.fps_counter = 0
         self.fps_displayer = None
 
         # multiple threading
         self.program_continued = threading.Semaphore(0)
+        self.update_image = threading.Semaphore(0)
+        self.image_updated = threading.Semaphore(0)
         self.target_updated = threading.Semaphore(0)
+        self.camera_update_interval = None
+        self.target_detect_time_cost = None
 
         # resolution
         user32 = windll.user32
@@ -47,8 +54,14 @@ class DeadEyeCore:
         self.rel_resolution_x, self.rel_resolution_y = dxcam.output_res()[0]
         print('Scaled screen resolution:', self.rel_resolution_x, 'x', self.rel_resolution_y)
         self.screen_shot_camera = ScreenShotHelper(view_range[0], view_range[1], ScreenShotHelper.CameraType.DXCAM)
+        self.image = None
+        self.image_expired = True
 
         # start threads
+        camera_thread = threading.Thread(target=self.camera, args=())
+        camera_thread.daemon = True
+        camera_thread.start()
+        print('Camera thread started.')
         target_detecting_therad = threading.Thread(target=self.target_detector, args=())
         target_detecting_therad.daemon = True
         target_detecting_therad.start()
@@ -61,6 +74,7 @@ class DeadEyeCore:
     def on_exit(self):
         if not self.if_paused:
             self.switch_pause_state()
+        time.sleep(1)
 
     def switch_pause_state(self):
         self.if_paused = not self.if_paused
@@ -76,46 +90,69 @@ class DeadEyeCore:
         self.if_auto_aim = not self.if_auto_aim
         return self.if_auto_aim
 
-    def target_detector(self):
+    def camera(self):
         while 1:
             self.program_continued.acquire()
+            self.fps_timer = time.time()
             while 1:
                 if not self.if_paused:
                     t0 = time.time()
-                    screen_shot = self.screen_shot_camera.capture_screen_shot()
-                    if screen_shot is None:
+                    image = self.screen_shot_camera.capture_screen_shot()
+                    if image is None:
                         continue
-                    t1 = time.time()
-                    # print('Screen shot time cost:', t1 - t0)
-                    # print('Screen shot size:', screen_shot.shape)
                     if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
-                        screen_shot = cv2.cvtColor(screen_shot, cv2.COLOR_BGR2RGB)
-                    # cv2.imshow('screen_shot', screen_shot)
+                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                    self.image = image
+                    self.image_updated.release()
+                    image_update_time = time.time()
+                    if self.image_update_time is not None:
+                        self.camera_update_interval = image_update_time - self.image_update_time
+                    self.image_update_time = image_update_time
+                    print(f'Screen shot time cost: {self.image_update_time - t0}s.')
+                    # print('Screen shot size:', image.shape)
+                    # cv2.imshow('image', image)
                     # cv2.waitKey(0)
-
-                    self.new_target_list = self.detect_module.target_detect(screen_shot)
-                    # print(f'Detected {len(self.new_target_list)} targets.')
-                    for target in self.new_target_list:
-                        print(target)
-                    self.targets_detected_time = time.time()
-                    if len(self.new_target_list):
-                        # 利用旧目标与当前目标进行目标位置的优化
-                        self.opt_targets()
-                    else:
-                        self.target_list.clear()
-                    self.target_updated.release()
-
-                    # print('Detect time cost:', self.targets_detected_time - t1)
-                    total_time_cost = self.targets_detected_time - t0
-                    # print('Total time cost:', total_time_cost)
-                    fps = 1 / total_time_cost
-                    if self.fps_displayer:
-                        self.fps_displayer.set(f"{round(fps)}")
-                    else:
-                        print('FPS:', fps)
+                    self.update_image.acquire()
                 else:
                     print('Paused.')
                     break
+
+    def target_detector(self):
+        while 1:
+            self.image_updated.acquire()
+            t0 = time.time()
+            image_update_time = self.image_update_time
+            print(f'Using image update at {image_update_time - t0}s ago.')
+            image = self.image
+            self.image = None
+            self.update_image.release()
+            self.new_target_list = self.detect_module.target_detect(image)
+            print(f'Detected {len(self.new_target_list)} targets.')
+            for target in self.new_target_list:
+                print(target)
+            self.targets_detected_time = time.time()
+            if len(self.new_target_list):
+                # 利用旧目标与当前目标进行目标位置的优化
+                self.opt_targets()
+            else:
+                self.target_list.clear()
+            self.target_updated.release()
+
+            self.target_detect_time_cost = self.targets_detected_time - t0
+            print(f'Detect time cost: {self.target_detect_time_cost}s.')
+            total_time_cost = self.targets_detected_time - image_update_time
+            print(f'Total time cost: {total_time_cost}.')
+            current_time = time.time()
+            if current_time - self.fps_timer >= 1:
+                fps = self.fps_counter / (current_time - self.fps_timer)
+                if self.fps_displayer:
+                    self.fps_displayer.set(f"{round(fps)}")
+                else:
+                    print('FPS:', fps)
+                self.fps_counter = 0
+                self.fps_timer = current_time
+            else:
+                self.fps_counter += 1
 
     def auto_aim(self):
         while 1:
