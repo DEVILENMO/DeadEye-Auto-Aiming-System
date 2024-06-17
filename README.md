@@ -2,9 +2,9 @@
 
 <img src="DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
 
-DeadEye 目标追踪系统是一款高性能的图像辅助目标追踪工具，作为样例提供了FPS游戏中目标追踪以及对应的瞄准效果演示，示例程序通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。除此以外，我还将这个系统应用在光学控制、监控目标追踪中，但是不给出示例程序，用户可以通过简单的修改对应模块来将这个系统应用在不同领域中。
+DeadEye 目标追踪系统是一款高性能的图像辅助目标追踪工具。作为示例，提供了在FPS游戏中的目标追踪以及对应的瞄准效果演示。示例程序通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。不仅如此，我还将这个系统应用在光学激光控制和监控探头的目标追踪中，虽然这些领域的示例程序没有提供，但用户可以通过简单修改相关模块，将这个系统应用于不同领域。
 
-DeadEye target tracking system is a high-performance image-assisted target tracking tool. As an example, it provides a demonstration of target tracking and corresponding aiming effects in FPS games. The sample program analyzes screenshots, detects and tracks targets, and finally implements assisted aiming and automatic trigger functions through simulated operations. In addition, I also apply this system to optical control and monitoring target tracking, but I will not provide sample programs. Users can apply this system in different fields by simply modifying the corresponding modules.
+DeadEye target tracking system is a high-performance image-assisted target tracking tool. As an example, it provides a demonstration of target tracking and corresponding aiming effects in FPS games. The sample program analyzes screenshots, detects and tracks targets, and finally implements assisted aiming and automatic trigger functions through simulated operations. Additionally, I have applied this system to optical laser control and monitoring target tracking. Although sample programs for these fields are not provided, users can apply this system in different domains by simply modifying the corresponding modules.
 
 ## 特性
 
@@ -12,7 +12,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 - **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于 `.pt` 权重文件的直接检测或使用 TensorRT 部署后的 `.trt` / `.engine` 模型进行精确的目标检测。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **辅助瞄准**: 辅助瞄准模块 DeadEyeAutoAimingModule 类继承于 AutoAimModule 基类，利用 PID 控制算法实现平滑的辅助瞄准。
-- **易于扩展**: 用户可以根据需求定制或扩展自己的目标检测模块或辅助瞄准模块。
+- **易于扩展**: 用户可以根据需求定制自己的图像输入模块、目标检测模块、后处理（辅助瞄准）模块以及驱动控制模块（鼠标控制或其他）。
 - **多语言UI**: 具有简单直观的用户界面,支持英文和简体中文两种语言,用户可以方便地切换语言或者增加新的语言支持。
 
 ## Features
@@ -21,29 +21,28 @@ DeadEye target tracking system is a high-performance image-assisted target track
 - **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using `.pt` weight files or precise target detection using deployed TensorRT models with `.trt` / `.engine` formats.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Assist Aiming**: The DeadEyeAutoAimingModule class, inheriting from the AutoAimModule base class, uses PID control algorithms to achieve smooth assist aiming.
-- **Easy to Extend**: Users can customize or extend their own target detection modules or assist aiming modules according to their needs.
+- **Easy to Extend**: Users can customize their own image input module, target detection module, post-processing (assisted aiming) module and drive control module (mouse control or other) according to their needs.
 - **Multi-language UI**: Features a simple and intuitive user interface that supports both English and Simplified Chinese. Users can easily switch between languages or add support for new languages.
 
 
 ## 技术路线
 
-### 截图模块 (ScreenShotHelper) / Screenshot Module (ScreenShotHelper)
-
+### 相机模块 (BaseCamera)
+作为示例实现了一个快速的截图相机 `SimpleScreenShotCamera` ，可以快速获取指定大小的屏幕截图，用户可以自己实现自己的相机类并在 `main.py` 中的 `main` 函数里实例化并传入至 `DeadEyeCore` 中。
 - **自动分辨率计算**: 自动检测屏幕分辨率并调整截图尺寸适应不同大小的窗口需求。
 - **高速截图**: 采用 `dxcam` 或 `mss` 实现高速截图功能。
+- **定制扩展**：你只需要继承 `BaseCamera` 类并且实现 `get_image()` 函数返回恰当的图像就可以自定义你的相机了。
 
 
 ### 目标检测模块 (DetectModule)
-
+作为示例实现了一个基于 `Yolov8` 进行目标检测的 `YoloDetector` 类，用户可以自己实现自己的目标检测类，只需要保证输出的格式为 list<list<c, x, y, w, h>> 即可。
 - **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.trt` / `.engine` 模型的基于 TensorRT 的部署方式进行高效检测。
 
 ### 目标追踪
-
 - **目标类 (Target)**: 基于检测结果，使用匈牙利算法进行帧间目标匹配和编号，此外使用卡尔曼滤波算法对目标位置进行预测和优化，以实现平滑的追踪效果。
 
 ### 瞄准模块 (AutoAimModule)
-
-- **DeadEyeAutoAimingModule**: 基础的辅助瞄准模块类，实现了核心的瞄准功能。
+作为示例实现了一个 `DeadEyeAutoAimingModule` 类，支持使用 PID 算法进行瞄准。
 - **定制扩展**: 允许用户继承或修改基类，创建个性化的辅助瞄准模块。
 
 ### 鼠标控制模块（MouseControlModule）
@@ -52,21 +51,23 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ## Technological Path
 
-### Screenshot Module (ScreenShotHelper)
-- **Automatic Resolution Calculation**: Automatically detects screen resolution and adjusts the screenshot size to accommodate different window sizes.
-- **High-Speed Screenshots**: Uses advanced libraries like `dxcam` or `mss` to capture high-speed screenshots with minimal performance impact.
+### Camera Module (BaseCamera)
+An example implementation of a quick screenshot camera, `SimpleScreenShotCamera`, is provided. This camera can quickly capture screenshots of a specified size. Users can implement their own camera class and instantiate it in the `main` function of `main.py`, then pass it to `DeadEyeCore`.
+- **Automatic Resolution Calculation**: Automatically detects screen resolution and adjusts the screenshot size to accommodate different window requirements.
+- **High-Speed Screenshot**: Utilizes `dxcam` or `mss` to achieve high-speed screenshot functionality.
+- **Custom Extensions**: To customize your camera, simply inherit from the `BaseCamera` class and implement the `get_image()` function to return the appropriate image.
 
-### Target Detection Module (YoloDetector)
-- **Model Compatibility**: Supports direct detection using `.pt` model files, offering flexibility in model training and deployment.
-- **Efficient Detection**: Incorporates `.trt` / `.engine` models with TensorRT for efficient and accurate target detection, optimizing for lower latency and higher throughput.
+### Target Detection Module (DetectModule)
+An example implementation of target detection based on `Yolov8` is provided with the `YoloDetector` class. Users can implement their own target detection class, as long as the output format is `list<list<c, x, y, w, h>>`.
+- **YoloDetector Class**: Can use `.pt` models for direct detection and also supports efficient detection using `.trt` / `.engine` models through TensorRT deployment.
 
 ### Target Tracking
 - **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
 - **Position Prediction and Optimization**: Employs Kalman filter algorithms to predict and optimize target positions, resulting in smoother tracking and better performance.
 
-### Aiming Module (DeadEyeAutoAimingModule)
-- **Core Aiming Functions**: Implements the fundamental features necessary for assisted aiming, such as target locking and trajectory adjustment.
-- **Customization and Extension**: Designed with extensibility in mind, allowing users to inherit from or modify the base class to create customized aiming modules tailored to specific requirements.
+### Auto Aim Module (AutoAimModule)
+An example implementation is provided with the `DeadEyeAutoAimingModule` class, which supports aiming using the PID algorithm.
+- **Custom Extensions**: Allows users to inherit or modify the base class to create personalized aiming assistance modules.
 
 ### Mouse control module (MouseControlModule)
 - **SimpleMouseController**: Mouse control class instance. The `DeadEyeAutoAimingModule` class will instantiate this class during `__init__` and use this class to control the mouse. Users need to implement the two mouse control functions in this class, `click_left_button` and `move_mouse`, which correspond to clicking the left mouse button and moving the mouse respectively.

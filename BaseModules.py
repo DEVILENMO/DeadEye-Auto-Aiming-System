@@ -85,3 +85,11 @@ class MouseControlModule:
 
     def move_mouse(self, x: int, y: int):
         raise NotImplementedError('Subclass must implement this method.')
+
+
+class BaseCamera:
+    def __init__(self):
+        raise NotImplementedError('Subclass must implement this method.')
+
+    def get_image(self):
+        raise NotImplementedError('Subclass must implement this method.')

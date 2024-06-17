@@ -2,24 +2,23 @@
 # cython: language_level=3
 import threading
 import time
-from ctypes import windll
 
-import cv2
 from scipy.optimize import linear_sum_assignment
 
 from BaseModules import *
-from ScreenShotHelper import *
 
 
 class DeadEyeCore:
-    def __init__(self, detect_module: DetectModule, aim_module: AutoAimModule, view_range: tuple):
+    def __init__(self, camera: BaseCamera, detect_module: DetectModule, aim_module: AutoAimModule):
         print('Initing DeadEye core system...')
         self.if_paused = True
         print('System is set to paused state while initing.')
-        self.detect_module = detect_module
-        self.aim_module = aim_module
 
-        # auto aim settings
+        # detector
+        self.detect_module = detect_module
+
+        # auto aim
+        self.aim_module = aim_module
         self.if_auto_shoot = False  # auto shoot state
         self.if_auto_aim = False  # auto aim state
 
@@ -41,21 +40,13 @@ class DeadEyeCore:
         self.image_updated = threading.Semaphore(0)
         self.target_updated = threading.Semaphore(0)
 
-        # resolution
-        user32 = windll.user32
-        user32.SetProcessDPIAware()
-        self.ori_resolution_x, self.ori_resolution_y = (
-            win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN),
-            win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN))
-        print('Screen resolution:', self.ori_resolution_x, 'x', self.ori_resolution_y)
-        self.rel_resolution_x, self.rel_resolution_y = dxcam.output_res()[0]
-        print('Scaled screen resolution:', self.rel_resolution_x, 'x', self.rel_resolution_y)
-        self.screen_shot_camera = ScreenShotHelper(view_range[0], view_range[1], ScreenShotHelper.CameraType.DXCAM)
+        # camera
+        self.camera = camera
         self.image = None
         self.image_expired = True
 
         # start threads
-        camera_thread = threading.Thread(target=self.camera, args=())
+        camera_thread = threading.Thread(target=self.camera_thread, args=())
         camera_thread.daemon = True
         camera_thread.start()
         print('Camera thread started.')
@@ -87,22 +78,21 @@ class DeadEyeCore:
         self.if_auto_aim = not self.if_auto_aim
         return self.if_auto_aim
 
-    def camera(self):
+    def camera_thread(self):
         while 1:
             self.program_continued.acquire()
             self.fps_timer = time.time()
             while 1:
                 if not self.if_paused:
                     t0 = time.time()
-                    image = self.screen_shot_camera.capture_screen_shot()
+                    image = self.camera.get_image()
                     if image is None:
                         continue
-                    if self.screen_shot_camera.image_color_mode == ScreenShotHelper.ImageColorMode.BGR:
-                        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
                     self.image = image
                     self.image_updated.release()
                     self.image_update_time = time.time()
-                    # print(f'Screen shot time cost: {self.image_update_time - t0}s.')
+                    print(f'Screen shot time cost: {self.image_update_time - t0}s.')
                     # print('Screen shot size:', image.shape)
                     # cv2.imshow('image', image)
                     # cv2.waitKey(0)
@@ -121,14 +111,14 @@ class DeadEyeCore:
             self.image = None
             self.update_image.release()
             self.new_target_list = self.detect_module.target_detect(image)
-            # print(f'Detected {len(self.new_target_list)} targets.')
-            for target in self.new_target_list:
-                print(target)
+            print(f'Detected {len(self.new_target_list)} targets.')
+            # for target in self.new_target_list:
+            #     print(target)
             targets_detected_time = time.time()
             self.target_updated.release()
 
             target_detect_time_cost = time.time() - t0
-            # print(f'Detect time cost: {target_detect_time_cost}s.')
+            print(f'Detect time cost: {target_detect_time_cost}s.')
             total_time_cost = targets_detected_time - image_update_time
             # print(f'Total time cost: {total_time_cost}.')
             current_time = time.time()
@@ -185,7 +175,7 @@ class DeadEyeCore:
         return matche_result
 
     def opt_targets(self):
-        # 采用卡尔曼滤波算法对目标真实位置进行预测
+        # 采用匈牙利算法追踪物体后用卡尔曼滤波算法对目标真实位置进行预测
         # t0 = time.time()
         target_match_result_list = self.hungarian_algorithm()  # 匈牙利算法
         # 统计匹配情况

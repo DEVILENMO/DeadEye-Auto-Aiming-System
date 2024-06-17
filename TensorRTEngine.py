@@ -37,12 +37,12 @@ class Yolov8TensorRTEngine(object):
         else:
             raise ValueError(f'Unsupported model file extension: {ext}')
 
-        # Todo: If you choose to use your .trt / .engine weight file, you should modify the class info here.
-        self.class_num = 3
-        self.class_name_list = ['ally', 'enemy', 'tag']
-        print(f'Class number: {self.class_num}, Class name: {self.class_name_list}')
-
         if self.model_type == ModelType.TRT:
+            # Todo: If you choose to use your .trt weight file, you should modify the class info here.
+            self.class_num = 3
+            self.class_name_list = ['ally', 'enemy', 'tag']
+            print(f'Class number: {self.class_num}, Class name: {self.class_name_list}')
+
             self.cuda_context_for_multiple_threading = cuda.Device(0).make_context()
             self.mean = None
             self.std = None

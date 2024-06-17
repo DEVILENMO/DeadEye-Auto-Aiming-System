@@ -268,7 +268,9 @@ if __name__ == '__main__':
     detect_module = YoloDetector('./weights/apex_v8s.engine')  # set your model file here, .pt .trt or .engine
     print('Initing auto aiming module...')
     auto_aiming_module = DeadEyeAutoAimingModule(view_range)
-    dead_eye = DeadEyeCore(detect_module, auto_aiming_module, view_range)
+    print('Initing camera module...')
+    camera_module = SimpleScreenShotCamera(view_range)
+    dead_eye = DeadEyeCore(camera_module, detect_module, auto_aiming_module)
 
     # 多线程变量
     program_continued = threading.Semaphore(0)

@@ -98,7 +98,7 @@ class ScreenShotHelper:
         return mss(), self.calculate_mss_view_range(self.view_width, self.view_height)
 
     def calculate_mss_view_range(self, width, height):
-        # use pyautogui resolution result for mss camera
+        # use pyautogui resolution result for mss camera_thread
         self.resolution_x, self.resolution_y = pyautogui.size()
         left = (self.resolution_x - width) // 2
         top = (self.resolution_y - height) // 2
