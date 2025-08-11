@@ -347,3 +347,7 @@ During the development of this project, I referenced the following excellent ope
 This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3). By using, modifying, or distributing the code in this project, you agree to comply with all the terms and conditions of AGPLv3.
 
 Please refer to the [LICENSE](LICENSE.txt) file for the full text of the license.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=DEVILENMO/DeadEye-Auto-Aiming-System&type=Date)](https://www.star-history.com/#DEVILENMO/DeadEye-Auto-Aiming-System&Date)
