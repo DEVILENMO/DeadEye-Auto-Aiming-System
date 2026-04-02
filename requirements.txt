@@ -6,6 +6,7 @@ colorama==0.4.6
 coloredlogs==15.0.1
 comtypes==1.4.4
 contourpy==1.2.1
+customtkinter==5.2.2
 cycler==0.12.1
 Cython==3.0.10
 dxcam==0.0.5
