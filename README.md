@@ -8,12 +8,12 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ## 近期更新（2026）
 
-- **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：
-  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
+- **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
   - **推理后端**：`.pt` → Ultralytics（torch）；`.onnx` → ONNX Runtime CUDA EP（IOBinding 稳态零分配，无 GPU 自动回退 CPU）；`.engine` / `.plan` / `.trt` → 原生 TensorRT 10/11 后端（cuda-python + pinned 显存预分配 + 非默认流）。
   - **引擎工具链**：`tools/export_yolo.py`（pt → ONNX/engine）、`tools/build_engines.py`（ONNX → FP16 引擎，timing cache + 元数据 sidecar + 过期自动重建）、`tools/benchmark.py`（预处理/推理/后处理分项基准）。RTX 5090 实测 TensorRT FP16 端到端 430~520 FPS（见下方**性能基准**）。
   - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
   - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
+- **目标追踪重构（2026-10）**：追踪逻辑独立为 `TargetTracker`——IoU 代价 + 类别/IoU 双门控的向量化匈牙利匹配（关联用 KF 预测框）、8 维等速卡尔曼滤波真正接入预测-更新闭环、目标生命周期可配置（漏检 N 帧保留同 ID / 连续 M 帧确认，UI「追踪参数」面板），消除单帧漏检导致的 ID 跳变；详见目标追踪章节。
 - **截屏后端升级（2026-10）**：`dxcam` 已停止维护且与新版本不兼容，移除；截屏改为 `windows-capture`（Windows.Graphics.Capture）→ `bettercam`（DXGI）→ `mss`（GDI）自动降级链，详见输入模块章节。
 - **流水线**：`DeadEyeCore`（`deadeye/core/dead_eye_core.py`）中数据流为：输入源取帧 → `DetectModule.target_detect` → 匈牙利匹配与卡尔曼更新 `Target` 列表 → 依次调用各 **`ExecutionModule.update_targets(frame, target_list)`**。
 - **目录规范**：业务模块目录统一为 `*_module`：`deadeye/input_module`、`deadeye/detection_module`、`deadeye/execution_module`（原 `input` / `detection` / `aim` / `output` 已调整；`VideoWriterOutput` 已并入 `execution_module`）。
@@ -32,6 +32,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
   - **Engine toolchain**: `tools/export_yolo.py` (pt → ONNX/engine), `tools/build_engines.py` (ONNX → FP16 engines with timing cache, metadata sidecar and staleness rebuild), `tools/benchmark.py` (per-stage benchmarking). 430–520 FPS end-to-end with TensorRT FP16 on an RTX 5090 (see **Benchmarks** below).
   - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
   - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
+- **Target tracking rewrite (Oct 2026)**: tracking extracted into `TargetTracker` — vectorized Hungarian matching over IoU cost with class/IoU gating (association on KF-predicted boxes), an 8-state constant-velocity Kalman filter actually wired into the predict-update loop, and configurable target lifecycle (missed-frame retention with stable IDs / min-hits confirmation, via the UI **Tracking** panel), eliminating single-miss ID churn. See the target tracking section.
 - **Screen-capture upgrade (Oct 2026)**: `dxcam` (unmaintained) removed; capture now falls back automatically `windows-capture` (Windows.Graphics.Capture) → `bettercam` (DXGI) → `mss` (GDI). See the input module section.
 - **Pipeline**: In `DeadEyeCore` (`deadeye/core/dead_eye_core.py`), the flow is: grab a frame from the input camera → `DetectModule.target_detect` → Hungarian matching + Kalman updates on `Target` → each **`ExecutionModule.update_targets(frame, target_list)`** in order.
 - **Package layout**: Module folders are named `*_module`: `deadeye/input_module`, `deadeye/detection_module`, `deadeye/execution_module` (replacing the old `input` / `detection` / `aim` / `output` layout; `VideoWriterOutput` now lives under `execution_module`).
@@ -113,8 +114,11 @@ python -m pytest tests/ -q                                               # 单�
 2. **预处理 / 后处理**：letterbox 直接写入预分配缓冲（避免逐帧分配与 GC 抖动）；后处理为向量化 numpy——v8/v11 解码头需 NMS（约 0.1~0.3 ms），YOLO26 的端到端头在图内完成 top-k，CPU 侧仅过滤（约 0.02 ms）。
 3. **使用方式**：`.onnx` 加载即自动尝试 CUDA（无 GPU 或 DLL 缺失时自动回退 CPU 并告警）；`.engine` 先 `python tools/build_engines.py weights/xxx.onnx` 一次性构建（引擎绑定 GPU 架构与 TRT 版本，不随仓库分发）；`python tools/benchmark.py weights/ --engine --cpu` 一键对比三档耗时。
 
-### 目标追踪
-- **目标类 (Target)**: 基于检测结果，使用匈牙利算法进行帧间目标匹配和编号，此外使用卡尔曼滤波算法对目标位置进行预测和优化，以实现平滑的追踪效果。
+### 目标追踪 — `deadeye/core/target_tracker.py`
+独立的多目标追踪器，三项能力均可通过 UI「追踪参数」面板配置：
+- **帧间匹配**：匈牙利算法（`scipy.linear_sum_assignment`）求解 **IoU 代价矩阵**（向量化计算，尺度无关），叠加**类别门控 + IoU 门控**——跨类别或重叠不足的目标对不参与关联（修复了旧实现跨类别代价为 0 被优先匹配的反向 bug；曼哈顿角点距离也一并替换）。
+- **卡尔曼滤波**：每个目标一个 8 维等速 KF（中心+尺寸+速度，`BoxKalmanFilter`），**匹配用 KF 预测框**而非上一帧观测，运动目标关联更稳、观测噪声被平滑；漏检帧由 KF 预测推进目标位置。
+- **目标生命周期**：`漏检保留帧数`（默认 5，漏检期间目标保留且 **ID 不变**，超过才删除）与 `确认命中帧数`（默认 1，连续命中 N 帧才成为正式目标，抑制单帧误检）——解决「一帧漏检就删目标、下一帧又生成新目标」的 ID 跳变问题。
 
 ### 执行模块 (ExecutionModule) — `deadeye/execution_module`
 示例包括 `DeadEyeAutoAimingModule`（PID 辅助瞄准）与 `VideoWriterOutput`（画框并写出视频）。均继承 **`ExecutionModule`**，实现 `update_targets(image, target_list)`。
@@ -173,9 +177,11 @@ Per-frame data flow: screen capture RGB → (CPU) letterbox → H2D copy → GPU
 2. **Pre-/post-processing**: letterbox writes into pre-allocated buffers (no per-frame allocation / GC jitter); post-processing is vectorized numpy — v8/v11 decode heads need NMS (~0.1–0.3 ms), while YOLO26's end-to-end head does top-k inside the graph, leaving only thresholding on CPU (~0.02 ms).
 3. **Usage**: `.onnx` models automatically try CUDA on load (falling back to CPU with a warning when the GPU or DLLs are unavailable); `.engine` models are built once via `python tools/build_engines.py weights/xxx.onnx` (engines are tied to GPU architecture and TRT version, hence not distributed with the repo); `python tools/benchmark.py weights/ --engine --cpu` compares all three tiers in one run.
 
-### Target Tracking
-- **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
-- **Position Prediction and Optimization**: Employs Kalman filter algorithms to predict and optimize target positions, resulting in smoother tracking and better performance.
+### Target Tracking — `deadeye/core/target_tracker.py`
+A standalone multi-object tracker; all three aspects are configurable via the UI **Tracking** panel:
+- **Frame-to-frame association**: Hungarian assignment (`scipy.linear_sum_assignment`) over a **vectorized IoU cost matrix** (scale-invariant) with **class gating + IoU gating** — cross-class or barely-overlapping pairs never associate (fixes the legacy inverted bug where cross-class pairs had cost 0 and were matched first; the Manhattan corner distance is replaced as well).
+- **Kalman filtering**: one 8-state constant-velocity KF per target (center + size + velocity, `BoxKalmanFilter`); association uses the **KF-predicted box** instead of the last observation — steadier association for moving targets and smoothed observations. Missed frames advance the target via KF prediction.
+- **Target lifecycle**: `missed-frames keep` (default 5 — targets persist through misses with **stable IDs** before being dropped) and `min hits to confirm` (default 1 — a detection must hit N consecutive frames to become a confirmed target, suppressing single-frame false positives) — eliminating the ID churn where one missed frame deleted a target and the next frame spawned a new one.
 
 ### Execution Module (ExecutionModule) — `deadeye/execution_module`
 Examples include `DeadEyeAutoAimingModule` (PID aim assist) and `VideoWriterOutput` (draw boxes and write video). All inherit **`ExecutionModule`** and implement `update_targets(image, target_list)`.

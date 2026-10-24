@@ -25,6 +25,7 @@ UI_TEXT = {
         'basic_settings': 'Basic settings',
         'startup_config': 'Pipeline configuration',
         'detect_module': 'Detector',
+        'tracking': 'Tracking',
         'input_module': 'Input',
         'exec_module': 'Execution',
         'module_params_fmt': '{name} parameters',
@@ -55,6 +56,7 @@ UI_TEXT = {
         'basic_settings': '基本设置',
         'startup_config': '启动配置',
         'detect_module': '检测模块',
+        'tracking': '追踪参数',
         'input_module': '输入模块',
         'exec_module': '执行模块',
         'module_params_fmt': '{name} 参数',
@@ -152,6 +154,9 @@ class DeadEyeUI(ctk.CTk):
         self.exec_config_frame = None
         self.exec_config_vars: dict[str, tk.Variable] = {}
         self.exec_config_widgets: list[ctk.CTkBaseClass] = []
+        self.tracking_config_frame = None
+        self.tracking_config_vars: dict[str, tk.Variable] = {}
+        self.tracking_config_widgets: list[ctk.CTkBaseClass] = []
         self.input_config_frame = None
         self.input_config_vars: dict[str, tk.Variable] = {}
         self.input_config_widgets: list[ctk.CTkBaseClass] = []
@@ -175,6 +180,7 @@ class DeadEyeUI(ctk.CTk):
         self._label_startup_config = None
         self._label_detect_module = None
         self._label_input_module = None
+        self._label_tracking = None
         self._label_exec_module = None
 
         self.camera_class_map = _discover_subclasses_in_package('deadeye.input_module', BaseCamera)
@@ -288,8 +294,14 @@ class DeadEyeUI(ctk.CTk):
         self.exec_menu.grid(row=5, column=1, padx=10, pady=6, sticky='w')
 
         self.exec_config_frame = ctk.CTkFrame(config_frame, corner_radius=8)
-        self.exec_config_frame.grid(row=6, column=0, columnspan=3, padx=10, pady=(6, 10), sticky='ew')
+        self.exec_config_frame.grid(row=6, column=0, columnspan=3, padx=10, pady=(6, 0), sticky='ew')
         self.exec_config_frame.grid_columnconfigure(1, weight=1)
+
+        self._label_tracking = ctk.CTkLabel(config_frame, text=self._t('tracking'))
+        self._label_tracking.grid(row=7, column=0, padx=10, pady=6, sticky='w')
+        self.tracking_config_frame = ctk.CTkFrame(config_frame, corner_radius=8)
+        self.tracking_config_frame.grid(row=8, column=0, columnspan=3, padx=10, pady=(6, 10), sticky='ew')
+        self.tracking_config_frame.grid_columnconfigure(1, weight=1)
 
         run_control_frame = ctk.CTkFrame(main_frame, corner_radius=10)
         run_control_frame.grid(row=2, column=0, padx=10, pady=(0, 8), sticky='ew')
@@ -341,6 +353,7 @@ class DeadEyeUI(ctk.CTk):
         self._on_detect_module_changed(self.detect_module_var.get())
         self._on_input_module_changed(self.input_module_var.get())
         self._on_exec_module_changed()
+        self._rebuild_tracking_panel()
         self._refresh_aim_runtime_visibility()
         self._refresh_run_control_state()
 
@@ -357,6 +370,8 @@ class DeadEyeUI(ctk.CTk):
             self._label_detect_module.configure(text=self._t('detect_module'))
         if self._label_input_module is not None:
             self._label_input_module.configure(text=self._t('input_module'))
+        if self._label_tracking is not None:
+            self._label_tracking.configure(text=self._t('tracking'))
         if self._label_exec_module is not None:
             self._label_exec_module.configure(text=self._t('exec_module'))
         if self.auto_aim_checkbutton is not None:
@@ -368,6 +383,7 @@ class DeadEyeUI(ctk.CTk):
         self._on_detect_module_changed(self.detect_module_var.get())
         self._on_input_module_changed(self.input_module_var.get())
         self._on_exec_module_changed()
+        self._rebuild_tracking_panel()
         self._refresh_run_control_state()
 
     def _refresh_run_control_state(self):
@@ -478,6 +494,12 @@ class DeadEyeUI(ctk.CTk):
     def _set_status(self, text: str):
         self.status_var.set(text)
         self.update_idletasks()
+
+    def _rebuild_tracking_panel(self):
+        self._rebuild_dynamic_panel(
+            self.tracking_config_frame, DeadEyeCore,
+            self.tracking_config_vars, self.tracking_config_widgets,
+        )
 
     def _on_exec_module_changed(self):
         self._rebuild_exec_config_panel()
@@ -702,11 +724,17 @@ class DeadEyeUI(ctk.CTk):
                 self._instantiate_execution_module(exec_cls, view_range, raw_exec_config)
             )
 
+            raw_tracking_config: dict[str, object] = {}
+            for k, v in self.tracking_config_vars.items():
+                raw_tracking_config[k] = v.get()
+            tracking_config = DeadEyeCore.parse_config(raw_tracking_config)
+
             self._set_status(self._t('status_starting_core'))
             self.dead_eye_core = DeadEyeCore(
                 self.camera_module,
                 self.detect_module,
                 execution_modules=execution_modules,
+                **tracking_config,
             )
             self.dead_eye_core.fps_displayer = self.fps_value_var
 

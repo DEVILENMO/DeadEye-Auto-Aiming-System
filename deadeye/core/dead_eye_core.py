@@ -1,31 +1,54 @@
 # coding: utf-8
 # cython: language_level=3
+"""
+DeadEye 核心流水线：相机线程 -> 检测线程 -> 追踪/执行线程。
+
+追踪逻辑（匹配 + 卡尔曼 + 目标生命周期）委托给 TargetTracker，
+参数（匹配 IoU 门控 / 漏检保留帧数 / 确认命中帧数）可通过构造函数或
+ConfigurableMixin 表单配置。
+"""
 import threading
 import time
 
-from scipy.optimize import linear_sum_assignment
+from deadeye.base.configurable import ConfigurableMixin
+from deadeye.base.modules import BaseCamera, DetectModule, ExecutionModule
+from deadeye.core.target_tracker import TargetTracker
 
-from deadeye.base.modules import BaseCamera, DetectModule, ExecutionModule, Target
 
+class DeadEyeCore(ConfigurableMixin):
+    @classmethod
+    def declare_config(cls) -> None:
+        cls.register_float('match_iou_threshold', 0.3, label='匹配 IoU 门控', min_value=0.05, max_value=0.95, step=0.05)
+        cls.register_int('max_missed_frames', 5, label='漏检保留帧数', min_value=0, max_value=60, step=1)
+        cls.register_int('min_hits_to_confirm', 1, label='确认命中帧数', min_value=1, max_value=10, step=1)
 
-class DeadEyeCore:
     def __init__(
         self,
         camera: BaseCamera,
         detect_module: DetectModule,
         execution_modules: list[ExecutionModule] | None = None,
+        *,
+        tracker: TargetTracker | None = None,
+        match_iou_threshold: float = 0.3,
+        max_missed_frames: int = 5,
+        min_hits_to_confirm: int = 1,
+        verbose: bool = False,
     ):
         print('Initing DeadEye core system...')
         self.if_paused = True
         print('System is set to paused state while initing.')
 
+        self.verbose = verbose  # 逐帧调试打印开关（高帧率下建议关闭）
         self.detect_module = detect_module
         self.execution_modules = execution_modules or []
 
-        self.target_list = []
-        self.previous_targets_detected_time = None
+        self.tracker = tracker or TargetTracker(
+            match_iou_threshold=match_iou_threshold,
+            max_missed_frames=max_missed_frames,
+            min_hits_to_confirm=min_hits_to_confirm,
+        )
+        self.target_list = self.tracker.targets
         self.new_target_list = []
-        self.target_num = 0
 
         self.image_update_time = None
         self.fps_timer = time.time()
@@ -94,10 +117,10 @@ class DeadEyeCore:
                     self.image = image
                     self.image_updated.release()
                     self.image_update_time = time.time()
-                    print(f'Screen shot time cost: {self.image_update_time - t0}s.')
+                    if self.verbose:
+                        print(f'Screen shot time cost: {self.image_update_time - t0}s.')
                     self.update_image.acquire()
                 else:
-                    print('Paused.')
                     break
 
     def target_detector(self):
@@ -115,12 +138,11 @@ class DeadEyeCore:
                 self._last_frame_for_output = None
 
             self.new_target_list = self.detect_module.target_detect(image)
-            print(f'Detected {len(self.new_target_list)} targets.')
-            targets_detected_time = time.time()
             self.target_updated.release()
 
-            target_detect_time_cost = time.time() - t0
-            print(f'Detect time cost: {target_detect_time_cost}s.')
+            if self.verbose:
+                print(f'Detected {len(self.new_target_list)} targets, '
+                      f'time cost: {time.time() - t0}s.')
             current_time = time.time()
             if current_time - self.fps_timer >= 1:
                 fps = self.fps_counter / (current_time - self.fps_timer)
@@ -138,10 +160,8 @@ class DeadEyeCore:
             self.target_updated.acquire()
             frame_for_output = self._last_frame_for_output
 
-            if len(self.new_target_list):
-                self.opt_targets()
-            else:
-                self.target_list.clear()
+            # 空检测帧也走 update：目标由 KF 预测推进并在 max_missed_frames 内保留
+            self.target_list = self.tracker.update(self.new_target_list)
 
             if frame_for_output is not None:
                 for m in self.execution_modules:
@@ -149,49 +169,3 @@ class DeadEyeCore:
                         m.update_targets(frame_for_output, list(self.target_list))
                     except Exception:
                         continue
-
-    def hungarian_algorithm(self):
-        matche_result = []
-        previous_targets_num = len(self.target_list)
-        targets_num = len(self.new_target_list)
-        if previous_targets_num > 0 and targets_num > 0:
-            distances = [[0] * targets_num for i in range(previous_targets_num)]
-            for i in range(previous_targets_num):
-                for j in range(targets_num):
-                    if self.target_list[i].label != self.new_target_list[j][0]:
-                        continue
-                    distances[i][j] = abs(self.target_list[i].left_top[0] - self.new_target_list[j][1][0]) + \
-                                      abs(self.target_list[i].left_top[1] - self.new_target_list[j][1][1]) + \
-                                      abs(self.target_list[i].right_bottom[0] - self.new_target_list[j][2][0]) + \
-                                      abs(self.target_list[i].right_bottom[1] - self.new_target_list[j][2][1])
-            row_ind, col_ind = linear_sum_assignment(distances)
-            for i in range(len(row_ind)):
-                matche_result.append((row_ind[i], col_ind[i]))
-        return matche_result
-
-    def opt_targets(self):
-        target_match_result_list = self.hungarian_algorithm()
-        matched_previous_index_dict = {}
-        matched_index_list = []
-        for match_relation in target_match_result_list:
-            matched_previous_index_dict[match_relation[0]] = match_relation[1]
-            matched_index_list.append(match_relation[1])
-
-        expired_target_list = []
-        for index, target in enumerate(self.target_list):
-            if index not in matched_previous_index_dict.keys():
-                expired_target_list.append(target)
-                continue
-            target.update_position(self.new_target_list[matched_previous_index_dict[index]][1],
-                                   self.new_target_list[matched_previous_index_dict[index]][2])
-        for expired_target in expired_target_list:
-            self.target_list.remove(expired_target)
-
-        for index in range(0, len(self.new_target_list)):
-            if index in matched_index_list:
-                continue
-            new_target = self.new_target_list[index]
-            target = Target(new_target[0], self.target_num, new_target[1],
-                            new_target[2])
-            self.target_num = self.target_num + 1
-            self.target_list.append(target)

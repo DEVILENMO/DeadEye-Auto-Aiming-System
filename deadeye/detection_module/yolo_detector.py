@@ -29,8 +29,8 @@ ULTRALYTICS_EXTS = ('.pt',)
 
 def _default_model_path() -> str:
     candidates = [
-        os.path.abspath(os.path.join('.', 'weights', 'test_v11s_320.onnx')),
-        os.path.abspath(os.path.join('.', 'weights', 'apex_yolov8.pt')),
+        os.path.abspath(os.path.join('.', 'weights', 'apex_v11s_320.onnx')),
+        os.path.abspath(os.path.join('.', 'weights', 'apex_v26s_320.onnx')),
         os.path.abspath(os.path.join('.', 'weights', 'best.pt')),
     ]
     for path in candidates:
