@@ -1,12 +1,16 @@
 # coding: utf-8
 # cython: language_level=3
 """
-TensorRT 引擎批量构建工具（ONNX -> .engine，FP16 + timing cache + 元数据 sidecar）。
+TensorRT 引擎批量构建工具（ONNX -> .engine，timing cache + 元数据 sidecar）。
+
+TRT 11 起精度跟随模型：FP16 引擎自动优先使用旁侧的 ``<stem>.fp16.onnx``
+（由 tools/convert_fp16.py 生成）作为构建源。
 
 用法示例：
-    python tools/build_engines.py weights/test_v11s_320.onnx weights/test_v26s_320.onnx
-    python tools/build_engines.py weights/ --fp32          # 目录下全部 onnx，FP32
-    python tools/build_engines.py weights/test_v11s_320.onnx --force   # 忽略缓存重建
+    python tools/convert_fp16.py weights/                # 先转 FP16 ONNX（一次性）
+    python tools/build_engines.py weights/               # 全部构建（FP16 引擎）
+    python tools/build_engines.py weights/apex_v11s_320.onnx --fp32
+    python tools/build_engines.py weights/ --force       # 忽略缓存重建
 """
 import argparse
 import glob
@@ -20,6 +24,8 @@ from deadeye.detection_module.backends.tensorrt_backend import (  # noqa: E402
     build_engine_from_onnx,
     default_engine_path,
     engine_is_current,
+    ensure_engine,
+    resolve_fp16_source,
 )
 
 
@@ -40,23 +46,27 @@ def main():
             onnx_files.append(item)
         else:
             print(f'跳过不存在的路径: {item}')
+    onnx_files = [f for f in onnx_files if not f.endswith('.fp16.onnx')]
     if not onnx_files:
         raise SystemExit('没有找到 ONNX 文件')
 
     built, reused, failed = [], [], []
     for onnx_path in onnx_files:
         engine_path = default_engine_path(onnx_path, fp16)
+        source = resolve_fp16_source(onnx_path)
+        was_current = os.path.isfile(engine_path) and engine_is_current(engine_path, source)
         try:
-            if not args.force and os.path.isfile(engine_path) and engine_is_current(engine_path, onnx_path):
-                print(f'[复用] {engine_path}')
-                reused.append(engine_path)
-                continue
-            t0 = time.time()
-            out = build_engine_from_onnx(
-                onnx_path, engine_path, fp16=fp16, workspace_gb=args.workspace
-            )
-            print(f'[完成] {out} ({time.time() - t0:.1f}s)')
-            built.append(out)
+            if args.force:
+                out = build_engine_from_onnx(
+                    source, engine_path, fp16=fp16, workspace_gb=args.workspace
+                )
+            else:
+                out = ensure_engine(
+                    onnx_path, engine_path, fp16=fp16, workspace_gb=args.workspace
+                )
+            tag = '复用' if was_current and not args.force else '完成'
+            print(f'[{tag}] {out} (源: {os.path.basename(source)})')
+            (reused if tag == '复用' else built).append(out)
         except Exception as exc:
             print(f'[失败] {onnx_path}: {exc}')
             failed.append(onnx_path)

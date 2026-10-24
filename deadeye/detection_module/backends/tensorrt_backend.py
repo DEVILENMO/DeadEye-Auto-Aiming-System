@@ -106,6 +106,30 @@ class _CudaDriver:
     def stream_destroy(self, stream):
         return self._call(self._cu.cuStreamDestroy, stream)
 
+    # ---------------- CUDA Graph ----------------
+
+    def stream_begin_capture(self, stream, mode=None):
+        if mode is None:
+            mode = getattr(self._cu, 'CU_STREAM_CAPTURE_MODE_THREAD_LOCAL', 0)
+        return self._call(self._cu.cuStreamBeginCapture, stream, mode)
+
+    def stream_end_capture(self, stream):
+        return self._call(self._cu.cuStreamEndCapture, stream)
+
+    def graph_instantiate(self, graph):
+        try:
+            # CUDA 12/13: cuGraphInstantiate(graph, flags)
+            return self._call(self._cu.cuGraphInstantiate, graph, 0)
+        except (TypeError, AttributeError):
+            # 旧签名: cuGraphInstantiate(graph)
+            return self._call(self._cu.cuGraphInstantiate, graph)
+
+    def graph_launch(self, graph_exec, stream):
+        return self._call(self._cu.cuGraphLaunch, graph_exec, stream)
+
+    def graph_exec_destroy(self, graph_exec):
+        return self._call(self._cu.cuGraphExecDestroy, graph_exec)
+
     @staticmethod
     def pinned_view(ptr: int, dtype, count: int) -> np.ndarray:
         base = _CTYPE_OF_DTYPE.get(np.dtype(dtype))
@@ -181,7 +205,21 @@ def engine_is_current(engine_path: str, onnx_path: str | None = None) -> bool:
 # --------------------------------------------------------------------------
 def default_engine_path(onnx_path: str, fp16: bool) -> str:
     stem = onnx_path[:-5] if onnx_path.lower().endswith('.onnx') else onnx_path
+    if stem.endswith('.fp16') or stem.endswith('.fp32'):
+        stem = stem[:-5]
     return f'{stem}.fp16.engine' if fp16 else f'{stem}.fp32.engine'
+
+
+def resolve_fp16_source(onnx_path: str) -> str:
+    """
+    TRT 11 起精度严格跟随模型：FP16 引擎应从 FP16 ONNX 构建。
+    若旁侧存在 ``<stem>.fp16.onnx``（tools/convert_fp16.py 产物）则优先使用。
+    """
+    if onnx_path.lower().endswith('.fp16.onnx'):
+        return onnx_path
+    stem = onnx_path[:-5] if onnx_path.lower().endswith('.onnx') else onnx_path
+    fp16_onnx = f'{stem}.fp16.onnx'
+    return fp16_onnx if os.path.isfile(fp16_onnx) else onnx_path
 
 
 def build_engine_from_onnx(
@@ -248,7 +286,8 @@ def build_engine_from_onnx(
     meta.update({
         'onnx_path': os.path.abspath(onnx_path),
         'onnx_mtime': os.path.getmtime(onnx_path),
-        'precision': 'fp16' if fp16 else 'fp32',
+        # TRT 11 精度跟随模型：记录真实来源（fp16.onnx -> 引擎即 FP16）
+        'precision': 'fp16' if (fp16 or onnx_path.lower().endswith('.fp16.onnx')) else 'fp32',
         'trt_version': trt.__version__,
         'built_at': time.strftime('%Y-%m-%d %H:%M:%S'),
     })
@@ -269,6 +308,8 @@ def ensure_engine(
     """返回可用的引擎路径：命中缓存则直接复用，否则构建。"""
     if engine_path is None:
         engine_path = default_engine_path(onnx_path, fp16)
+    if fp16:
+        onnx_path = resolve_fp16_source(onnx_path)
 
     if os.path.isfile(engine_path) and engine_is_current(engine_path, onnx_path):
         return engine_path
@@ -283,7 +324,7 @@ def ensure_engine(
 # 推理后端
 # --------------------------------------------------------------------------
 class TensorRTBackend(BaseInferBackend):
-    def __init__(self, engine_path: str, *, device_id: int = 0):
+    def __init__(self, engine_path: str, *, device_id: int = 0, use_cuda_graph: bool = True):
         if not os.path.isfile(engine_path):
             raise FileNotFoundError(f'TensorRT 引擎不存在: {engine_path}')
         if os.path.splitext(engine_path)[1].lower() not in ENGINE_EXTS:
@@ -295,12 +336,15 @@ class TensorRTBackend(BaseInferBackend):
             raise RuntimeError('未安装 tensorrt，请执行: pip install tensorrt') from exc
 
         self._precision = 'unknown'
+        self._use_cuda_graph = bool(use_cuda_graph)
+        self._graph_exec = None
         self._cuda = _CudaDriver()
         self._cuda.init()
         self._ctx = self._cuda.primary_ctx_retain(device_id)
 
         self._load_engine(engine_path)
         self._meta_from_sidecar(engine_path)
+        self._try_capture_graph()
 
     # -------------------------------------------------- setup
 
@@ -378,6 +422,66 @@ class TensorRTBackend(BaseInferBackend):
 
     # -------------------------------------------------- infer
 
+    def _enqueue(self, stream) -> list[np.ndarray]:
+        """在指定 stream 上入队完整推理链：H2D -> execute_async_v3 -> D2H。"""
+        cuda = self._cuda
+        in_tensor = self._tensors[self.input_name]
+        cuda.memcpy_htod_async(
+            int(in_tensor['device']), in_tensor['host_ptr'], in_tensor['allocated'], stream)
+        if not self._context.execute_async_v3(stream):
+            raise RuntimeError('TensorRT execute_async_v3 执行失败')
+        outputs = []
+        for name in self._output_names:
+            tensor = self._tensors[name]
+            if tensor['dynamic']:
+                shape = tuple(self._context.get_tensor_shape(name))
+                self._realloc_dynamic(name, shape)
+                out = tensor['host'].reshape(shape)
+            else:
+                out = tensor['host'].reshape(tensor['shape'])
+            cuda.memcpy_dtoh_async(
+                tensor['host_ptr'], int(tensor['device']), tensor['allocated'], stream)
+            outputs.append(out)
+        return outputs
+
+    def _try_capture_graph(self) -> None:
+        """
+        CUDA Graph：把 H2D -> 推理 -> D2H 整链捕获为单张图，每帧一次 launch。
+        batch=1 的小模型是 kernel launch 开销受限（数百个 kernel），图捕获收益显著；
+        静态形状专用，捕获失败自动回退逐 kernel 路径。
+        """
+        if not self._use_cuda_graph:
+            return
+        if any(t['dynamic'] for t in self._tensors.values()):
+            print('CUDA Graph 跳过：引擎含动态形状张量。')
+            return
+        cuda = self._cuda
+        cuda.ctx_push(self._ctx)
+        try:
+            self._enqueue(self._stream)  # 预热：完成 TRT tactic 初始化
+            cuda.stream_synchronize(self._stream)
+
+            cuda.stream_begin_capture(self._stream)
+            try:
+                self._enqueue(self._stream)
+                graph = cuda.stream_end_capture(self._stream)
+            except Exception:
+                try:
+                    cuda.stream_end_capture(self._stream)
+                except Exception:
+                    pass
+                raise
+            self._graph_exec = cuda.graph_instantiate(graph)
+            # 首次 launch 验证可用性
+            cuda.graph_launch(self._graph_exec, self._stream)
+            cuda.stream_synchronize(self._stream)
+            print('CUDA Graph 捕获成功：每帧单次 graph launch。')
+        except Exception as exc:
+            self._graph_exec = None
+            print(f'CUDA Graph 捕获失败，回退逐 kernel 执行: {exc}')
+        finally:
+            cuda.ctx_pop()
+
     def infer(self, blob: np.ndarray) -> list[np.ndarray]:
         cuda = self._cuda
         stream = self._stream
@@ -390,26 +494,17 @@ class TensorRTBackend(BaseInferBackend):
             self._context.set_input_shape(self.input_name, tuple(blob.shape))
             np.copyto(in_tensor['host'].reshape(blob.shape), blob)
 
-            cuda.memcpy_htod_async(
-                int(in_tensor['device']), in_tensor['host_ptr'], in_tensor['allocated'], stream)
+            if self._graph_exec is not None:
+                cuda.graph_launch(self._graph_exec, stream)
+                cuda.stream_synchronize(stream)
+                outputs = [
+                    self._tensors[name]['host'].reshape(self._tensors[name]['shape'])
+                    for name in self._output_names
+                ]
+            else:
+                outputs = self._enqueue(stream)
+                cuda.stream_synchronize(stream)
 
-            if not self._context.execute_async_v3(stream):
-                raise RuntimeError('TensorRT execute_async_v3 执行失败')
-
-            outputs = []
-            for name in self._output_names:
-                tensor = self._tensors[name]
-                if tensor['dynamic']:
-                    shape = tuple(self._context.get_tensor_shape(name))
-                    self._realloc_dynamic(name, shape)
-                    out = tensor['host'].reshape(shape)
-                else:
-                    out = tensor['host'].reshape(tensor['shape'])
-                cuda.memcpy_dtoh_async(
-                    tensor['host_ptr'], int(tensor['device']), tensor['allocated'], stream)
-                outputs.append(out)
-
-            cuda.stream_synchronize(stream)
             return [out.astype(np.float32, copy=False) for out in outputs]
         finally:
             cuda.ctx_pop()
@@ -440,6 +535,12 @@ class TensorRTBackend(BaseInferBackend):
         print('Destroying TensorRT backend...')
         self._cuda.ctx_push(self._ctx)
         try:
+            if self._graph_exec is not None:
+                try:
+                    self._cuda.graph_exec_destroy(self._graph_exec)
+                except Exception:
+                    pass
+                self._graph_exec = None
             for tensor in self._tensors.values():
                 if tensor.get('device'):
                     self._cuda.mem_free(tensor['device'])

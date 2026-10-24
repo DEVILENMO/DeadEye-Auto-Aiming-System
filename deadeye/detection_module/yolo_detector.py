@@ -61,6 +61,7 @@ class YoloDetector(DetectModule, ConfigurableMixin):
         cls.register_int('max_dets', 300, label='最大检测数', min_value=1, max_value=1000, step=1)
         cls.register_choice('device', 'auto', label='推理设备(ONNX)', choices=['auto', 'cuda', 'cpu'])
         cls.register_bool('use_tensorrt_ep', False, label='ONNX 走 TRT EP(实验)')
+        cls.register_bool('use_cuda_graph', True, label='TRT 引擎 CUDA Graph')
         cls.register_str('class_names', '', label='类别名覆盖(逗号分隔,可空)')
 
     def __init__(
@@ -72,6 +73,7 @@ class YoloDetector(DetectModule, ConfigurableMixin):
         max_dets: int = 300,
         device: str = 'auto',
         use_tensorrt_ep: bool = False,
+        use_cuda_graph: bool = True,
         class_names: str = '',
         **kwargs,
     ):
@@ -80,6 +82,7 @@ class YoloDetector(DetectModule, ConfigurableMixin):
         self.max_dets = int(max_dets)
         self._device = str(device)
         self._use_trt_ep = bool(use_tensorrt_ep)
+        self._use_cuda_graph = bool(use_cuda_graph)
 
         self.model: BaseInferBackend | None = None
         self._letterboxer: Letterboxer | None = None
@@ -103,7 +106,7 @@ class YoloDetector(DetectModule, ConfigurableMixin):
         elif lower.endswith('.onnx'):
             backend = OnnxRuntimeBackend(model_path, device=self._device, use_tensorrt_ep=self._use_trt_ep)
         elif lower.endswith(ENGINE_EXTS):
-            backend = TensorRTBackend(model_path)
+            backend = TensorRTBackend(model_path, use_cuda_graph=self._use_cuda_graph)
         else:
             raise ValueError(f'不支持的模型文件: {model_path}（支持 .pt / .onnx / .engine / .plan / .trt）')
 

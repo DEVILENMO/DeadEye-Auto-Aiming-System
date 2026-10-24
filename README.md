@@ -10,7 +10,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 - **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
   - **推理后端**：`.pt` → Ultralytics（torch）；`.onnx` → ONNX Runtime CUDA EP（IOBinding 稳态零分配，无 GPU 自动回退 CPU）；`.engine` / `.plan` / `.trt` → 原生 TensorRT 10/11 后端（cuda-python + pinned 显存预分配 + 非默认流）。
-  - **引擎工具链**：`tools/export_yolo.py`（pt → ONNX/engine）、`tools/build_engines.py`（ONNX → FP16 引擎，timing cache + 元数据 sidecar + 过期自动重建）、`tools/benchmark.py`（预处理/推理/后处理分项基准）。RTX 5090 实测 TensorRT FP16 端到端 430~520 FPS（见下方**性能基准**）。
+  - **引擎工具链**：`tools/export_yolo.py`（pt → ONNX/engine）、`tools/convert_fp16.py`（FP16 混合精度转换）、`tools/build_engines.py`（ONNX → FP16 引擎，timing cache + 元数据 sidecar + 过期自动重建）、`tools/benchmark.py`（预处理/推理/后处理分项基准）。TensorRT 后端默认启用 CUDA Graph，RTX 5090 实测端到端 789~1200 FPS（见下方**性能基准**）。
   - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
   - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
 - **目标追踪重构（2026-10）**：追踪逻辑独立为 `TargetTracker`——IoU 代价 + 类别/IoU 双门控的向量化匈牙利匹配（关联用 KF 预测框）、8 维等速卡尔曼滤波真正接入预测-更新闭环、目标生命周期可配置（漏检 N 帧保留同 ID / 连续 M 帧确认，UI「追踪参数」面板），消除单帧漏检导致的 ID 跳变；详见目标追踪章节。
@@ -29,7 +29,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 - **Detection & CUDA deployment rewrite (Oct 2026)**: The detection module is now a unified detector with pluggable inference backends (`deadeye/detection_module/backends/`):
   - **Model support**: YOLOv5 / v7 / v8 / v11 / v12 / 26 in one code base; the post-processor auto-decodes three output layouts (v5/v7 objectness heads, v8/v11/v12 decode heads, v10/v26 end-to-end NMS-free heads), disambiguated via Ultralytics export metadata first.
   - **Inference backends**: `.pt` → Ultralytics (torch); `.onnx` → ONNX Runtime CUDA EP (IOBinding with zero steady-state allocations, automatic CPU fallback); `.engine` / `.plan` / `.trt` → native TensorRT 10/11 backend (cuda-python, pinned pre-allocated buffers, non-default stream).
-  - **Engine toolchain**: `tools/export_yolo.py` (pt → ONNX/engine), `tools/build_engines.py` (ONNX → FP16 engines with timing cache, metadata sidecar and staleness rebuild), `tools/benchmark.py` (per-stage benchmarking). 430–520 FPS end-to-end with TensorRT FP16 on an RTX 5090 (see **Benchmarks** below).
+  - **Engine toolchain**: `tools/export_yolo.py` (pt → ONNX/engine), `tools/convert_fp16.py` (mixed-FP16 conversion), `tools/build_engines.py` (ONNX → FP16 engines with timing cache, metadata sidecar and staleness rebuild), `tools/benchmark.py` (per-stage benchmarking). CUDA-Graph-accelerated TRT backend reaches 789–1200 FPS end-to-end on an RTX 5090 (see **Benchmarks** below).
   - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
   - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
 - **Target tracking rewrite (Oct 2026)**: tracking extracted into `TargetTracker` — vectorized Hungarian matching over IoU cost with class/IoU gating (association on KF-predicted boxes), an 8-state constant-velocity Kalman filter actually wired into the predict-update loop, and configurable target lifecycle (missed-frame retention with stable IDs / min-hits confirmation, via the UI **Tracking** panel), eliminating single-miss ID churn. See the target tracking section.
@@ -47,7 +47,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
 - **多版本 YOLO 检测**: `YoloDetector` 继承于 `DetectModule` 基类，一套代码支持 **YOLOv5 / v7 / v8 / v11 / v12 / 26**；输出头自动识别解码，训练权重（`.pt`）、ONNX（CUDA EP）与 TensorRT 引擎（`.engine` / `.plan` / `.trt`）三种部署格式自动分发。
-- **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT FP16 端到端 **430~520 FPS**。
+- **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT + CUDA Graph 端到端 **789~1200 FPS**。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用 PID 控制算法。
 - **易于扩展**: 可在 `input_module`、`detection_module`、`execution_module` 中按基类扩展；鼠标等行为由执行模块内 `MouseControlModule` 等实现，按需自行接入硬件或驱动。
@@ -57,7 +57,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
 - **Multi-generation YOLO detection**: `YoloDetector` derives from `DetectModule` and supports **YOLOv5 / v7 / v8 / v11 / v12 / 26** in one code base; output heads are auto-decoded, and training weights (`.pt`), ONNX (CUDA EP) and TensorRT engines (`.engine` / `.plan` / `.trt`) are dispatched automatically.
-- **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **430–520 FPS end-to-end** with TensorRT FP16 on an RTX 5090.
+- **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **789–1200 FPS end-to-end** with TensorRT + CUDA Graph on an RTX 5090.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a PID controller.
 - **Easy to Extend**: Extend `input_module`, `detection_module`, and `execution_module` via their base classes; mouse or other actuation is wired inside execution modules (e.g. `MouseControlModule` patterns) for your own hardware.
@@ -88,21 +88,25 @@ DeadEye target tracking system is a high-performance image-assisted target track
 部署工具链（`tools/`）：
 ```bash
 python tools/export_yolo.py weights/model.pt --format onnx --imgsz 320   # 导出 ONNX
+python tools/convert_fp16.py weights/                                    # FP16 混合精度转换（体积减半）
 python tools/build_engines.py weights/*.onnx                             # 构建 FP16 引擎（含缓存）
 python tools/benchmark.py weights/ --engine --cpu                        # 后端基准对比
 python -m pytest tests/ -q                                               # 单元测试
 ```
 
-### 性能基准（RTX 5090，输入 320×320 / 256×256，端到端含预处理与后处理）
+### 性能基准（RTX 5090，端到端含预处理与后处理，200 帧均值）
 
-| 模型 | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT FP16 |
+| 模型 | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
 |---|---|---|---|
-| YOLOv11s @ 256 | 173 FPS（5.35 ms） | 250 FPS（3.70 ms） | **519 FPS（1.62 ms）** |
-| YOLOv11s @ 320 | 124 FPS（7.61 ms） | 241 FPS（3.84 ms） | **480 FPS（1.73 ms）** |
-| YOLO26s @ 256  | 161 FPS（5.86 ms） | 206 FPS（4.63 ms） | **469 FPS（1.94 ms）** |
-| YOLO26s @ 320  | 120 FPS（8.03 ms） | 214 FPS（4.49 ms） | **431 FPS（2.19 ms）** |
+| YOLOv11s @ 256 | 168 FPS（5.47 ms） | 188 FPS（4.99 ms） | **1200 FPS（0.83 ms）** |
+| YOLOv11s @ 320 | 125 FPS（7.50 ms） | 243 FPS（4.12 ms） | **1198 FPS（0.83 ms）** |
+| YOLO26s @ 256  | 162 FPS（6.17 ms） | 227 FPS（4.40 ms） | **1005 FPS（1.00 ms）** |
+| YOLO26s @ 320  | 126 FPS（7.97 ms） | 177 FPS（5.65 ms） | **789 FPS（1.27 ms）** |
 
-> 表中为 `tools/benchmark.py` 200 帧均值。TensorRT FP16 相比 ONNX Runtime CUDA 提升约 2 倍、相比 CPU 提升约 3~4 倍；YOLO26 的端到端检测头省去 NMS，后处理仅 0.02 ms（v11 为 0.14~0.27 ms）。
+> 数据来自 `tools/benchmark.py`。关键结论：
+> - **CUDA Graph**（TRT 后端默认开启）把每帧数百次 kernel launch 合并为一次图启动，是本次最大收益来源——推理仅 0.63~1.11 ms，端到端 **789~1200 FPS**，比 ORT CUDA 快 4~5 倍、比 CPU 快 7~9 倍；
+> - 这批 256/320 输入的 s 模型在 batch=1 下是**延迟/launch 开销受限**而非算力受限，因此 FP16 权重转换（体积减半）对吞吐影响很小（±2%），TRT 11 也会自动选择最快 kernel 精度；
+> - YOLO26 的端到端检测头省去 NMS，后处理仅 0.01~0.02 ms（v11 为 0.08~0.16 ms）。
 
 ### CUDA 加速说明
 
@@ -110,7 +114,9 @@ python -m pytest tests/ -q                                               # 单�
 
 1. **推理后端（主要收益）**
    - **ONNX Runtime CUDA EP**：`cuda_env.py` 在启动时自动把 torch/lib 与 pip 安装的 NVIDIA 包注册进 DLL 搜索路径，因此 pip 安装即用、无需系统级 CUDA 配置；会话用 IOBinding 把输入直接绑定到预处理复用缓冲、输出预分配到固定 host 数组，稳态推理**零内存分配**，每次调用只剩 1 次 H2D + 计算 + 1 次 D2H。
-   - **TensorRT 引擎（最快档）**：`tools/build_engines.py` 离线构建 FP16 引擎（builder 逐层针对具体 GPU 型号选择最优 kernel 与 tactic，附 timing cache 加速重复构建；TRT 11 起精度跟随模型类型，无需 builder flag）。推理侧由 `backends/tensorrt_backend.py` 用 cuda-python 直连驱动：pinned host 缓冲与 device 显存**全部预分配**、`set_tensor_address + execute_async_v3` 走非默认流（避开默认流的隐式同步），元数据 sidecar 记录类别名 / imgsz / 端到端标记，加载引擎即得全部解码参数。
+   - **TensorRT 引擎（最快档）**：`tools/build_engines.py` 离线构建引擎（builder 逐层针对具体 GPU 型号选择最优 kernel 与 tactic，附 timing cache 加速重复构建）。推理侧由 `backends/tensorrt_backend.py` 用 cuda-python 直连驱动：pinned host 缓冲与 device 显存**全部预分配**、非默认流避开默认流的隐式同步，元数据 sidecar 记录类别名 / imgsz / 端到端标记，加载引擎即得全部解码参数。
+   - **CUDA Graph（TRT 后端默认开启）**：初始化时把「H2D → execute_async_v3 → D2H」整条推理链捕获为一张 CUDA Graph，之后每帧**单次 graph launch** 替代数百次 kernel launch——batch=1 小模型的 launch 开销是主要瓶颈，这一步带来 2 倍以上推理加速（`use_cuda_graph` 可关，动态形状引擎自动跳过）。
+   - **FP16 混合精度（`tools/convert_fp16.py`）**：ONNX 内部权重/算子转 FP16（IO 保持 FP32 或自动回退），体积减半；端到端检测头（TopK 机器）与数值敏感算子自动保持 FP32。TRT 11 起精度严格跟随模型，FP16 引擎以 `.fp16.onnx` 为构建源（`build_engines.py` 自动识别）。
 2. **预处理 / 后处理**：letterbox 直接写入预分配缓冲（避免逐帧分配与 GC 抖动）；后处理为向量化 numpy——v8/v11 解码头需 NMS（约 0.1~0.3 ms），YOLO26 的端到端头在图内完成 top-k，CPU 侧仅过滤（约 0.02 ms）。
 3. **使用方式**：`.onnx` 加载即自动尝试 CUDA（无 GPU 或 DLL 缺失时自动回退 CPU 并告警）；`.engine` 先 `python tools/build_engines.py weights/xxx.onnx` 一次性构建（引擎绑定 GPU 架构与 TRT 版本，不随仓库分发）；`python tools/benchmark.py weights/ --engine --cpu` 一键对比三档耗时。
 
@@ -151,21 +157,25 @@ The post-processor (`postprocess.py`) auto-decodes three output layouts with vec
 Deployment toolchain (`tools/`):
 ```bash
 python tools/export_yolo.py weights/model.pt --format onnx --imgsz 320   # export ONNX
+python tools/convert_fp16.py weights/                                    # mixed-FP16 conversion (half size)
 python tools/build_engines.py weights/*.onnx                             # build FP16 engines (cached)
 python tools/benchmark.py weights/ --engine --cpu                        # backend comparison
 python -m pytest tests/ -q                                               # unit tests
 ```
 
-### Benchmarks (RTX 5090, 320×320 / 256×256 input, end-to-end incl. pre/post-processing)
+### Benchmarks (RTX 5090, end-to-end incl. pre/post-processing, mean of 200 frames)
 
-| Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT FP16 |
+| Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
 |---|---|---|---|
-| YOLOv11s @ 256 | 173 FPS (5.35 ms) | 250 FPS (3.70 ms) | **519 FPS (1.62 ms)** |
-| YOLOv11s @ 320 | 124 FPS (7.61 ms) | 241 FPS (3.84 ms) | **480 FPS (1.73 ms)** |
-| YOLO26s @ 256  | 161 FPS (5.86 ms) | 206 FPS (4.63 ms) | **469 FPS (1.94 ms)** |
-| YOLO26s @ 320  | 120 FPS (8.03 ms) | 214 FPS (4.49 ms) | **431 FPS (2.19 ms)** |
+| YOLOv11s @ 256 | 168 FPS (5.47 ms) | 188 FPS (4.99 ms) | **1200 FPS (0.83 ms)** |
+| YOLOv11s @ 320 | 125 FPS (7.50 ms) | 243 FPS (4.12 ms) | **1198 FPS (0.83 ms)** |
+| YOLO26s @ 256  | 162 FPS (6.17 ms) | 227 FPS (4.40 ms) | **1005 FPS (1.00 ms)** |
+| YOLO26s @ 320  | 126 FPS (7.97 ms) | 177 FPS (5.65 ms) | **789 FPS (1.27 ms)** |
 
-> Means over 200 frames via `tools/benchmark.py`. TensorRT FP16 is ~2× faster than ONNX Runtime CUDA and ~3–4× faster than CPU; YOLO26's end-to-end head removes NMS, cutting post-processing to 0.02 ms (v11: 0.14–0.27 ms).
+> Via `tools/benchmark.py`. Key takeaways:
+> - **CUDA Graph** (on by default in the TRT backend) collapses hundreds of per-frame kernel launches into a single graph launch — the biggest win here: inference takes just 0.63–1.11 ms, i.e. **789–1200 FPS end-to-end**, 4–5× faster than ORT CUDA and 7–9× faster than CPU;
+> - these 256/320-input s-models at batch=1 are **launch-latency bound**, not compute bound — hence FP16 weight conversion (half the file size) barely moves throughput (±2%), and TRT 11 already auto-selects the fastest kernel precision;
+> - YOLO26's end-to-end head removes NMS, cutting post-processing to 0.01–0.02 ms (v11: 0.08–0.16 ms).
 
 ### How the CUDA acceleration works
 
@@ -173,7 +183,9 @@ Per-frame data flow: screen capture RGB → (CPU) letterbox → H2D copy → GPU
 
 1. **Inference backends (the main win)**
    - **ONNX Runtime CUDA EP**: at startup `cuda_env.py` auto-registers torch/lib and pip-installed NVIDIA packages on the DLL search path — pip install is all you need, no system-level CUDA setup. The session uses IOBinding to bind the input directly to the pre-allocated letterbox buffer and outputs to fixed host arrays, so steady-state inference makes **zero allocations**: each call is 1× H2D + compute + 1× D2H.
-   - **TensorRT engines (fastest tier)**: `tools/build_engines.py` builds FP16 engines offline (the builder picks per-layer optimal kernels/tactics for the exact GPU model, with a timing cache to speed up rebuilds; from TRT 11 precision follows the model, no builder flags). At runtime `backends/tensorrt_backend.py` talks to the driver via cuda-python: pinned host buffers and device memory are **fully pre-allocated**, `set_tensor_address` + `execute_async_v3` run on a non-default stream (avoiding implicit default-stream syncs), and the metadata sidecar carries names/imgsz/end-to-end flags so loading an engine yields every decoding parameter.
+   - **TensorRT engines (fastest tier)**: `tools/build_engines.py` builds engines offline (the builder picks per-layer optimal kernels/tactics for the exact GPU model, with a timing cache to speed up rebuilds). At runtime `backends/tensorrt_backend.py` talks to the driver via cuda-python: pinned host buffers and device memory are **fully pre-allocated**, running on a non-default stream (avoiding implicit default-stream syncs); the metadata sidecar carries names/imgsz/end-to-end flags so loading an engine yields every decoding parameter.
+   - **CUDA Graph (on by default in the TRT backend)**: at init the whole chain (H2D → execute_async_v3 → D2H) is captured into a CUDA Graph; afterwards each frame is **one graph launch** instead of hundreds of kernel launches — launch overhead is the dominant cost for batch-1 small models, worth 2×+ of inference speedup (`use_cuda_graph` can be disabled; skipped automatically for dynamic-shape engines).
+   - **Mixed FP16 (`tools/convert_fp16.py`)**: converts ONNX internal weights/ops to FP16 (IO kept FP32 where possible, with automatic fallback), halving file size; the end-to-end detection head (TopK machinery) and numerically sensitive ops stay FP32 automatically. From TRT 11 precision strictly follows the model, so FP16 engines build from the `.fp16.onnx` source (auto-detected by `build_engines.py`).
 2. **Pre-/post-processing**: letterbox writes into pre-allocated buffers (no per-frame allocation / GC jitter); post-processing is vectorized numpy — v8/v11 decode heads need NMS (~0.1–0.3 ms), while YOLO26's end-to-end head does top-k inside the graph, leaving only thresholding on CPU (~0.02 ms).
 3. **Usage**: `.onnx` models automatically try CUDA on load (falling back to CPU with a warning when the GPU or DLLs are unavailable); `.engine` models are built once via `python tools/build_engines.py weights/xxx.onnx` (engines are tied to GPU architecture and TRT version, hence not distributed with the repo); `python tools/benchmark.py weights/ --engine --cpu` compares all three tiers in one run.
 

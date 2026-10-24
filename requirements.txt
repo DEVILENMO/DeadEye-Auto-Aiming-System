@@ -28,6 +28,11 @@ onnxruntime-gpu>=1.19          # CUDA EP / TensorRT EP / CPU 三档自适应
 tensorrt>=10.9
 cuda-python>=12.6
 
+# ---- 模型精度转换（可选，tools/convert_fp16.py）----
+# pip install onnx onnxconverter-common
+onnx>=1.16
+onnxconverter-common>=1.14
+
 # ---- Ultralytics 训练权重 .pt + 导出工具（可选）----
 # torch 版本需与本机 CUDA 匹配，RTX 50 系（Blackwell）需 cu130：
 #   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
