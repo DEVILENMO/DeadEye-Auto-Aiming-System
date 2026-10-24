@@ -103,6 +103,16 @@ python -m pytest tests/ -q                                               # 单�
 
 > 表中为 `tools/benchmark.py` 200 帧均值。TensorRT FP16 相比 ONNX Runtime CUDA 提升约 2 倍、相比 CPU 提升约 3~4 倍；YOLO26 的端到端检测头省去 NMS，后处理仅 0.02 ms（v11 为 0.14~0.27 ms）。
 
+### CUDA 加速说明
+
+单帧数据流为：截屏 RGB →（CPU）letterbox 预处理 → H2D 拷贝 → GPU 推理 → D2H 拷贝 →（CPU）解码后处理。加速分三层：
+
+1. **推理后端（主要收益）**
+   - **ONNX Runtime CUDA EP**：`cuda_env.py` 在启动时自动把 torch/lib 与 pip 安装的 NVIDIA 包注册进 DLL 搜索路径，因此 pip 安装即用、无需系统级 CUDA 配置；会话用 IOBinding 把输入直接绑定到预处理复用缓冲、输出预分配到固定 host 数组，稳态推理**零内存分配**，每次调用只剩 1 次 H2D + 计算 + 1 次 D2H。
+   - **TensorRT 引擎（最快档）**：`tools/build_engines.py` 离线构建 FP16 引擎（builder 逐层针对具体 GPU 型号选择最优 kernel 与 tactic，附 timing cache 加速重复构建；TRT 11 起精度跟随模型类型，无需 builder flag）。推理侧由 `backends/tensorrt_backend.py` 用 cuda-python 直连驱动：pinned host 缓冲与 device 显存**全部预分配**、`set_tensor_address + execute_async_v3` 走非默认流（避开默认流的隐式同步），元数据 sidecar 记录类别名 / imgsz / 端到端标记，加载引擎即得全部解码参数。
+2. **预处理 / 后处理**：letterbox 直接写入预分配缓冲（避免逐帧分配与 GC 抖动）；后处理为向量化 numpy——v8/v11 解码头需 NMS（约 0.1~0.3 ms），YOLO26 的端到端头在图内完成 top-k，CPU 侧仅过滤（约 0.02 ms）。
+3. **使用方式**：`.onnx` 加载即自动尝试 CUDA（无 GPU 或 DLL 缺失时自动回退 CPU 并告警）；`.engine` 先 `python tools/build_engines.py weights/xxx.onnx` 一次性构建（引擎绑定 GPU 架构与 TRT 版本，不随仓库分发）；`python tools/benchmark.py weights/ --engine --cpu` 一键对比三档耗时。
+
 ### 目标追踪
 - **目标类 (Target)**: 基于检测结果，使用匈牙利算法进行帧间目标匹配和编号，此外使用卡尔曼滤波算法对目标位置进行预测和优化，以实现平滑的追踪效果。
 
@@ -152,6 +162,16 @@ python -m pytest tests/ -q                                               # unit 
 | YOLO26s @ 320  | 120 FPS (8.03 ms) | 214 FPS (4.49 ms) | **431 FPS (2.19 ms)** |
 
 > Means over 200 frames via `tools/benchmark.py`. TensorRT FP16 is ~2× faster than ONNX Runtime CUDA and ~3–4× faster than CPU; YOLO26's end-to-end head removes NMS, cutting post-processing to 0.02 ms (v11: 0.14–0.27 ms).
+
+### How the CUDA acceleration works
+
+Per-frame data flow: screen capture RGB → (CPU) letterbox → H2D copy → GPU inference → D2H copy → (CPU) decode post-processing. Acceleration happens on three layers:
+
+1. **Inference backends (the main win)**
+   - **ONNX Runtime CUDA EP**: at startup `cuda_env.py` auto-registers torch/lib and pip-installed NVIDIA packages on the DLL search path — pip install is all you need, no system-level CUDA setup. The session uses IOBinding to bind the input directly to the pre-allocated letterbox buffer and outputs to fixed host arrays, so steady-state inference makes **zero allocations**: each call is 1× H2D + compute + 1× D2H.
+   - **TensorRT engines (fastest tier)**: `tools/build_engines.py` builds FP16 engines offline (the builder picks per-layer optimal kernels/tactics for the exact GPU model, with a timing cache to speed up rebuilds; from TRT 11 precision follows the model, no builder flags). At runtime `backends/tensorrt_backend.py` talks to the driver via cuda-python: pinned host buffers and device memory are **fully pre-allocated**, `set_tensor_address` + `execute_async_v3` run on a non-default stream (avoiding implicit default-stream syncs), and the metadata sidecar carries names/imgsz/end-to-end flags so loading an engine yields every decoding parameter.
+2. **Pre-/post-processing**: letterbox writes into pre-allocated buffers (no per-frame allocation / GC jitter); post-processing is vectorized numpy — v8/v11 decode heads need NMS (~0.1–0.3 ms), while YOLO26's end-to-end head does top-k inside the graph, leaving only thresholding on CPU (~0.02 ms).
+3. **Usage**: `.onnx` models automatically try CUDA on load (falling back to CPU with a warning when the GPU or DLLs are unavailable); `.engine` models are built once via `python tools/build_engines.py weights/xxx.onnx` (engines are tied to GPU architecture and TRT version, hence not distributed with the repo); `python tools/benchmark.py weights/ --engine --cpu` compares all three tiers in one run.
 
 ### Target Tracking
 - **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
@@ -220,7 +240,7 @@ The following animation demonstrates the aiming assist effect provided by this p
    现代栈（TensorRT 10/11 + onnxruntime-gpu 1.2x）不需要手动配置系统 PATH：
    - pip 安装 `tensorrt`、`cuda-python`、`onnxruntime-gpu` 即可（CUDA 13 运行库 DLL 由 torch 捆绑提供）；
    - 程序启动时 `deadeye/detection_module/cuda_env.py` 会自动注册 `site-packages/nvidia/**/bin` 与 `torch/lib` 到 DLL 搜索路径；
-   - 若仍缺失，请确认依赖装在**运行所用环境**内（`pip list | grep -i "onnx\|tensorrt\|torch"`），旧版 TensorRT 8.6（`nvinfer.dll` 手动 PATH 时代）与 RTX 50 系显卡不兼容。
+   - 若仍缺失，请确认依赖装在**运行所用环境**内（`pip list | grep -i "onnx\|tensorrt\|torch"`），旧版 TensorRT 8.6（`nvinfer.dll` 手动 PATH 时代）与 RTX 50 系显卡不兼容；完整精确版本见 `requirements-freeze.txt`（`pip freeze` 快照，`pip install -r requirements-freeze.txt` 可复现基准测试环境）。
 
 2. 截屏后端
 
@@ -244,7 +264,7 @@ The following animation demonstrates the aiming assist effect provided by this p
    The modern stack (TensorRT 10/11 + onnxruntime-gpu 1.2x) needs no manual PATH setup:
    - just `pip install tensorrt cuda-python onnxruntime-gpu` (CUDA 13 runtime DLLs ship with torch);
    - at startup `deadeye/detection_module/cuda_env.py` auto-registers `site-packages/nvidia/**/bin` and `torch/lib` on the DLL search path;
-   - if DLLs are still missing, make sure the packages are installed **in the environment you run with** (`pip list | grep -i "onnx\|tensorrt\|torch"`); the legacy TensorRT 8.6 flow (manual `nvinfer.dll` PATH) is incompatible with RTX 50-series GPUs.
+   - if DLLs are still missing, make sure the packages are installed **in the environment you run with** (`pip list | grep -i "onnx\|tensorrt\|torch"`); the legacy TensorRT 8.6 flow (manual `nvinfer.dll` PATH) is incompatible with RTX 50-series GPUs. For exact reproduction see `requirements-freeze.txt` (a `pip freeze` snapshot: `pip install -r requirements-freeze.txt`).
 
 2. Screen capture backends
 
