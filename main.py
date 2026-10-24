@@ -653,8 +653,6 @@ class DeadEyeUI(ctk.CTk):
         detect_module_name = self.detect_module_var.get().strip()
 
         try:
-            view_range = (640, 640)
-
             detect_cls = self.detect_class_map.get(detect_module_name) or YoloDetector
             raw_detect_config: dict[str, object] = {}
             for k, v in self.detect_config_vars.items():
@@ -679,6 +677,12 @@ class DeadEyeUI(ctk.CTk):
                 input_config = camera_cls.parse_config(raw_input_config)
             else:
                 input_config = {}
+            # 抓取视口大小：输入模块配置（截屏相机的 view_width/view_height）优先，
+            # 其余相机回退到相机类的 DEFAULT_VIEW_SIZE，再回退到 320x320
+            default_size = getattr(camera_cls, 'DEFAULT_VIEW_SIZE', (320, 320))
+            view_w = int(input_config.pop('view_width', 0)) or int(default_size[0])
+            view_h = int(input_config.pop('view_height', 0)) or int(default_size[1])
+            view_range = (view_w, view_h)
             self._set_status(self._t('status_init_input', name=camera_cls.__name__))
             try:
                 self.camera_module = camera_cls(view_range, **input_config)

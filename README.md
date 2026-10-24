@@ -8,22 +8,36 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ## 近期更新（2026）
 
+- **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：
+  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
+  - **推理后端**：`.pt` → Ultralytics（torch）；`.onnx` → ONNX Runtime CUDA EP（IOBinding 稳态零分配，无 GPU 自动回退 CPU）；`.engine` / `.plan` / `.trt` → 原生 TensorRT 10/11 后端（cuda-python + pinned 显存预分配 + 非默认流）。
+  - **引擎工具链**：`tools/export_yolo.py`（pt → ONNX/engine）、`tools/build_engines.py`（ONNX → FP16 引擎，timing cache + 元数据 sidecar + 过期自动重建）、`tools/benchmark.py`（预处理/推理/后处理分项基准）。RTX 5090 实测 TensorRT FP16 端到端 430~520 FPS（见下方**性能基准**）。
+  - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
+  - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
+- **截屏后端升级（2026-10）**：`dxcam` 已停止维护且与新版本不兼容，移除；截屏改为 `windows-capture`（Windows.Graphics.Capture）→ `bettercam`（DXGI）→ `mss`（GDI）自动降级链，详见输入模块章节。
 - **流水线**：`DeadEyeCore`（`deadeye/core/dead_eye_core.py`）中数据流为：输入源取帧 → `DetectModule.target_detect` → 匈牙利匹配与卡尔曼更新 `Target` 列表 → 依次调用各 **`ExecutionModule.update_targets(frame, target_list)`**。
 - **目录规范**：业务模块目录统一为 `*_module`：`deadeye/input_module`、`deadeye/detection_module`、`deadeye/execution_module`（原 `input` / `detection` / `aim` / `output` 已调整；`VideoWriterOutput` 已并入 `execution_module`）。
 - **执行模块抽象**：瞄准与写视频等后处理统一继承 **`ExecutionModule`**，在检测与追踪完成后对当前帧与 `target_list` 调用 `update_targets()`；核心类 **`DeadEyeCore`** 使用 `execution_modules` 列表按顺序执行。
 - **移除 NoAimModule**：不再需要空瞄准占位类；默认可选 `DeadEyeAutoAimingModule` 或 `VideoWriterOutput` 等。
-- **图形界面**：顶部「基本设置」卡片（语言）；「启动配置」内含检测 / 输入 / 执行模块及动态参数（YOLO **模型路径**在检测模块参数中配置）；「运行控制」卡片内为状态、**FPS** 与 **开始运行 / 暂停 / 继续** 合一按钮；窗口默认高度加大以便参数区完整显示。
+- **图形界面**：顶部「基本设置」卡片（语言）；「启动配置」内含检测 / 输入 / 执行模块及动态参数（YOLO **模型路径**、置信度 / IoU / 推理设备等在检测模块参数中配置）；「运行控制」卡片内为状态、**FPS** 与 **开始运行 / 暂停 / 继续** 合一按钮；窗口默认高度加大以便参数区完整显示。
 - **视频输入**：`VideoFileCamera` 改为选择**单个视频文件**（`video_path`），不再扫描整个文件夹。
 - **多语言**：界面新增文案已纳入语言字典，切换中英文会同步更新卡片标题、状态提示、文件对话框与动态表单中的「选择」等文本。
 - **UI 组合**：各阶段模块通过 `main.py` 扫描 `*_module` 包与 `ConfigurableMixin` 动态生成参数表单。
 
 ## Recent Updates (2026)
 
+- **Detection & CUDA deployment rewrite (Oct 2026)**: The detection module is now a unified detector with pluggable inference backends (`deadeye/detection_module/backends/`):
+  - **Model support**: YOLOv5 / v7 / v8 / v11 / v12 / 26 in one code base; the post-processor auto-decodes three output layouts (v5/v7 objectness heads, v8/v11/v12 decode heads, v10/v26 end-to-end NMS-free heads), disambiguated via Ultralytics export metadata first.
+  - **Inference backends**: `.pt` → Ultralytics (torch); `.onnx` → ONNX Runtime CUDA EP (IOBinding with zero steady-state allocations, automatic CPU fallback); `.engine` / `.plan` / `.trt` → native TensorRT 10/11 backend (cuda-python, pinned pre-allocated buffers, non-default stream).
+  - **Engine toolchain**: `tools/export_yolo.py` (pt → ONNX/engine), `tools/build_engines.py` (ONNX → FP16 engines with timing cache, metadata sidecar and staleness rebuild), `tools/benchmark.py` (per-stage benchmarking). 430–520 FPS end-to-end with TensorRT FP16 on an RTX 5090 (see **Benchmarks** below).
+  - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
+  - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
+- **Screen-capture upgrade (Oct 2026)**: `dxcam` (unmaintained) removed; capture now falls back automatically `windows-capture` (Windows.Graphics.Capture) → `bettercam` (DXGI) → `mss` (GDI). See the input module section.
 - **Pipeline**: In `DeadEyeCore` (`deadeye/core/dead_eye_core.py`), the flow is: grab a frame from the input camera → `DetectModule.target_detect` → Hungarian matching + Kalman updates on `Target` → each **`ExecutionModule.update_targets(frame, target_list)`** in order.
 - **Package layout**: Module folders are named `*_module`: `deadeye/input_module`, `deadeye/detection_module`, `deadeye/execution_module` (replacing the old `input` / `detection` / `aim` / `output` layout; `VideoWriterOutput` now lives under `execution_module`).
 - **Execution abstraction**: Post-detection steps (aim assist, video export, etc.) share the **`ExecutionModule`** base class and implement `update_targets()`; **`DeadEyeCore`** runs a list `execution_modules` in order.
 - **NoAimModule removed**: No empty “no-op” aim class; defaults point to real modules such as `DeadEyeAutoAimingModule` or `VideoWriterOutput`.
-- **UI**: A top **Basic settings** card (language); **Pipeline configuration** for detector / input / execution with dynamic fields (**model path** is part of detector settings); **Run control** combines status, **FPS**, and a single **Start / Pause / Resume** button; taller default window for form layout.
+- **UI**: A top **Basic settings** card (language); **Pipeline configuration** for detector / input / execution with dynamic fields (model path, conf/IoU thresholds, inference device, etc.); **Run control** combines status, **FPS**, and a single **Start / Pause / Resume** button; taller default window for form layout.
 - **Video input**: `VideoFileCamera` uses a **single file** (`video_path`), not a directory of videos.
 - **Localization**: New UI strings go through the language dictionary so titles, status messages, file dialogs, and browse buttons update with English / 简体中文.
 - **UI composition**: `main.py` discovers classes under `*_module` packages and builds `ConfigurableMixin` forms for their settings.
@@ -31,7 +45,8 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ## 特性
 
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
-- **目标检测**: 目标检测 YoloDetector 类继承于 DetectModule 基类，基于 Yolov8 目标检测神经网络，支持基于 `.pt` 权重文件的直接检测或使用 TensorRT 部署后的 `.trt` / `.engine` 模型进行精确的目标检测。
+- **多版本 YOLO 检测**: `YoloDetector` 继承于 `DetectModule` 基类，一套代码支持 **YOLOv5 / v7 / v8 / v11 / v12 / 26**；输出头自动识别解码，训练权重（`.pt`）、ONNX（CUDA EP）与 TensorRT 引擎（`.engine` / `.plan` / `.trt`）三种部署格式自动分发。
+- **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT FP16 端到端 **430~520 FPS**。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
 - **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用 PID 控制算法。
 - **易于扩展**: 可在 `input_module`、`detection_module`、`execution_module` 中按基类扩展；鼠标等行为由执行模块内 `MouseControlModule` 等实现，按需自行接入硬件或驱动。
@@ -40,7 +55,8 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ## Features
 
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
-- **Target Detection**: The target detection class YoloDetector is derived from the base class DetectModule. It is based on the Yolov8 target detection neural network and supports direct detection using `.pt` weight files or precise target detection using deployed TensorRT models with `.trt` / `.engine` formats.
+- **Multi-generation YOLO detection**: `YoloDetector` derives from `DetectModule` and supports **YOLOv5 / v7 / v8 / v11 / v12 / 26** in one code base; output heads are auto-decoded, and training weights (`.pt`), ONNX (CUDA EP) and TensorRT engines (`.engine` / `.plan` / `.trt`) are dispatched automatically.
+- **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **430–520 FPS end-to-end** with TensorRT FP16 on an RTX 5090.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
 - **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a PID controller.
 - **Easy to Extend**: Extend `input_module`, `detection_module`, and `execution_module` via their base classes; mouse or other actuation is wired inside execution modules (e.g. `MouseControlModule` patterns) for your own hardware.
@@ -52,13 +68,40 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ### 输入模块 (BaseCamera) — `deadeye/input_module`
 作为示例实现了快速的截图相机 `SimpleScreenShotCamera` 以及单文件视频源 `VideoFileCamera`（选择**一个**视频路径）。用户可继承 `BaseCamera` 实现 `get_image()`，通过 `main.py` 的 UI 或自行组装 `DeadEyeCore` 使用。
 - **自动分辨率计算**: 自动检测屏幕分辨率并调整截图尺寸适应不同大小的窗口需求。
-- **高速截图**: 采用 `dxcam` 或 `mss` 实现高速截图功能。
+- **高速截图**: 采用 `windows-capture`（Windows.Graphics.Capture）实现高速截图，`bettercam`（DXGI Desktop Duplication）与 `mss` 自动降级兜底；`dxcam` 已因停止维护且与新版本不兼容而移除。
 - **定制扩展**：你只需要继承 `BaseCamera` 类并且实现 `get_image()` 函数返回恰当的图像就可以自定义你的相机了。
 
 
 ### 目标检测模块 (DetectModule) — `deadeye/detection_module`
-作为示例实现了基于 Yolov8 的 `YoloDetector` 类（支持 `ConfigurableMixin`，模型路径等在模块参数中配置）。用户可实现自己的检测类，保证输出格式与现有流水线一致即可。
-- **YoloDetector 类**: 可以使用 `.pt` 模型进行直接检测，也支持使用 `.trt` / `.engine` 模型的基于 TensorRT 的部署方式进行高效检测。
+`YoloDetector`（支持 `ConfigurableMixin`，模型路径、置信度 / IoU / 推理设备等均在模块参数中配置）按模型文件后缀自动分发到三个推理后端，输出统一的流水线目标格式。用户可实现自己的检测类，保证输出格式与现有流水线一致即可。
+
+- **UltralyticsBackend（`.pt`）**：训练权重直接推理（YOLOv8 / v11 / v12 / 26），启动时自动预热 torch/cudnn。
+- **OnnxRuntimeBackend（`.onnx`）**：设备自适应（CUDA EP → CPU），IOBinding + 输出预分配使稳态推理零内存分配；也可切换 TensorRT EP。
+- **TensorRTBackend（`.engine` / `.plan` / `.trt`）**：原生 TensorRT 10/11 API（`set_tensor_address` + `execute_async_v3`），cuda-python 驱动层、pinned host / device 缓冲预分配、非默认流；引擎由 `tools/build_engines.py` 构建并携带元数据 sidecar（类别名 / imgsz / 端到端标记 / 精度 / TRT 版本），过期自动判定。
+
+后处理（`postprocess.py`）按输出布局自动解码并做向量化 NMS：
+- v5 / v7：`[anchors, 5+nc]`（含 objectness，conf = obj × cls）
+- v8 / v11 / v12：`[4+nc, anchors]`（无 objectness 解码头）
+- v10 / v26：`[max_det, 6]` 端到端输出（免 NMS，后处理开销约 0.02~0.05 ms）
+
+部署工具链（`tools/`）：
+```bash
+python tools/export_yolo.py weights/model.pt --format onnx --imgsz 320   # 导出 ONNX
+python tools/build_engines.py weights/*.onnx                             # 构建 FP16 引擎（含缓存）
+python tools/benchmark.py weights/ --engine --cpu                        # 后端基准对比
+python -m pytest tests/ -q                                               # 单元测试
+```
+
+### 性能基准（RTX 5090，输入 320×320 / 256×256，端到端含预处理与后处理）
+
+| 模型 | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT FP16 |
+|---|---|---|---|
+| YOLOv11s @ 256 | 173 FPS（5.35 ms） | 250 FPS（3.70 ms） | **519 FPS（1.62 ms）** |
+| YOLOv11s @ 320 | 124 FPS（7.61 ms） | 241 FPS（3.84 ms） | **480 FPS（1.73 ms）** |
+| YOLO26s @ 256  | 161 FPS（5.86 ms） | 206 FPS（4.63 ms） | **469 FPS（1.94 ms）** |
+| YOLO26s @ 320  | 120 FPS（8.03 ms） | 214 FPS（4.49 ms） | **431 FPS（2.19 ms）** |
+
+> 表中为 `tools/benchmark.py` 200 帧均值。TensorRT FP16 相比 ONNX Runtime CUDA 提升约 2 倍、相比 CPU 提升约 3~4 倍；YOLO26 的端到端检测头省去 NMS，后处理仅 0.02 ms（v11 为 0.14~0.27 ms）。
 
 ### 目标追踪
 - **目标类 (Target)**: 基于检测结果，使用匈牙利算法进行帧间目标匹配和编号，此外使用卡尔曼滤波算法对目标位置进行预测和优化，以实现平滑的追踪效果。
@@ -76,12 +119,39 @@ DeadEye target tracking system is a high-performance image-assisted target track
 ### Input Module (BaseCamera) — `deadeye/input_module`
 Example implementations include `SimpleScreenShotCamera` for fast screen capture and `VideoFileCamera` for a **single** video file path. Inherit `BaseCamera`, implement `get_image()`, and wire it through the `main.py` UI or by constructing `DeadEyeCore` manually.
 - **Automatic Resolution Calculation**: Automatically detects screen resolution and adjusts the screenshot size to accommodate different window requirements.
-- **High-Speed Screenshot**: Utilizes `dxcam` or `mss` to achieve high-speed screenshot functionality.
+- **High-Speed Screenshot**: Utilizes `windows-capture` (Windows.Graphics.Capture) with automatic fallback to `bettercam` (DXGI Desktop Duplication) and `mss`; the unmaintained `dxcam` dependency has been removed.
 - **Custom Extensions**: To customize your camera, simply inherit from the `BaseCamera` class and implement the `get_image()` function to return the appropriate image.
 
 ### Target Detection Module (DetectModule) — `deadeye/detection_module`
-`YoloDetector` is based on Yolov8 and supports `ConfigurableMixin` (model path and other options in module settings). You may provide your own detector class as long as its output matches the pipeline contract.
-- **YoloDetector Class**: Can use `.pt` models for direct detection and also supports efficient detection using `.trt` / `.engine` models through TensorRT deployment.
+`YoloDetector` (with `ConfigurableMixin`; model path, conf/IoU thresholds and inference device are module settings) dispatches to one of three inference backends by file extension and emits the unified pipeline target format. You may provide your own detector class as long as its output matches the pipeline contract.
+
+- **UltralyticsBackend (`.pt`)**: run training weights directly (YOLOv8 / v11 / v12 / 26), with startup warm-up for torch/cudnn.
+- **OnnxRuntimeBackend (`.onnx`)**: device-adaptive (CUDA EP → CPU), IOBinding with pre-allocated outputs for zero steady-state allocation; TensorRT EP optional.
+- **TensorRTBackend (`.engine` / `.plan` / `.trt`)**: native TensorRT 10/11 API (`set_tensor_address` + `execute_async_v3`), cuda-python driver layer, pinned host / pre-allocated device buffers, non-default stream; engines built by `tools/build_engines.py` carry a metadata sidecar (names / imgsz / end-to-end flag / precision / TRT version) with staleness detection.
+
+The post-processor (`postprocess.py`) auto-decodes three output layouts with vectorized NMS:
+- v5 / v7: `[anchors, 5+nc]` (objectness; conf = obj × cls)
+- v8 / v11 / v12: `[4+nc, anchors]` (decode head, no objectness)
+- v10 / v26: `[max_det, 6]` end-to-end output (NMS-free; ~0.02–0.05 ms post-processing)
+
+Deployment toolchain (`tools/`):
+```bash
+python tools/export_yolo.py weights/model.pt --format onnx --imgsz 320   # export ONNX
+python tools/build_engines.py weights/*.onnx                             # build FP16 engines (cached)
+python tools/benchmark.py weights/ --engine --cpu                        # backend comparison
+python -m pytest tests/ -q                                               # unit tests
+```
+
+### Benchmarks (RTX 5090, 320×320 / 256×256 input, end-to-end incl. pre/post-processing)
+
+| Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT FP16 |
+|---|---|---|---|
+| YOLOv11s @ 256 | 173 FPS (5.35 ms) | 250 FPS (3.70 ms) | **519 FPS (1.62 ms)** |
+| YOLOv11s @ 320 | 124 FPS (7.61 ms) | 241 FPS (3.84 ms) | **480 FPS (1.73 ms)** |
+| YOLO26s @ 256  | 161 FPS (5.86 ms) | 206 FPS (4.63 ms) | **469 FPS (1.94 ms)** |
+| YOLO26s @ 320  | 120 FPS (8.03 ms) | 214 FPS (4.49 ms) | **431 FPS (2.19 ms)** |
+
+> Means over 200 frames via `tools/benchmark.py`. TensorRT FP16 is ~2× faster than ONNX Runtime CUDA and ~3–4× faster than CPU; YOLO26's end-to-end head removes NMS, cutting post-processing to 0.02 ms (v11: 0.14–0.27 ms).
 
 ### Target Tracking
 - **Inter-Frame Matching**: Utilizes the Hungarian algorithm for consistent target matching across frames, ensuring reliable tracking.
@@ -141,177 +211,54 @@ The following animation demonstrates the aiming assist effect provided by this p
 
 ### 常见问题
 
-1. TensorRT类
+1. TensorRT / CUDA 类
 
    `FileNotFoundError: Could not find: nvinfer.dll. Is it on your PATH?`
 
-   `FileNotFoundError: Could not find: cudnn64_8.dll. Is it on your PATH?`
+   `...cublasLt64_13.dll / cudnn64_9.dll which is missing`
 
-   `Could not find module 'C:\...\nvinfer_plugin.dll`
+   现代栈（TensorRT 10/11 + onnxruntime-gpu 1.2x）不需要手动配置系统 PATH：
+   - pip 安装 `tensorrt`、`cuda-python`、`onnxruntime-gpu` 即可（CUDA 13 运行库 DLL 由 torch 捆绑提供）；
+   - 程序启动时 `deadeye/detection_module/cuda_env.py` 会自动注册 `site-packages/nvidia/**/bin` 与 `torch/lib` 到 DLL 搜索路径；
+   - 若仍缺失，请确认依赖装在**运行所用环境**内（`pip list | grep -i "onnx\|tensorrt\|torch"`），旧版 TensorRT 8.6（`nvinfer.dll` 手动 PATH 时代）与 RTX 50 系显卡不兼容。
 
-   解决方式在 `deadeye/detection_module/tensorrt_engine.py` 及相关环境配置说明中查阅（若仍引用旧文件名，请以仓库内实际路径为准）。
+2. 截屏后端
 
-2. dxcam类
+   旧版使用 `dxcam` 时出现的 `AttributeError: module 'dxcam' has no attribute 'output_res'`
+   系 dxcam 停止维护所致。现已移除 `dxcam`，改为 `windows-capture`（默认）→ `bettercam` → `mss`
+   的自动降级链，也可在 UI 输入模块参数中指定「截屏后端」。
 
-   `AttributeError: module 'dxcam' has no attribute 'output_res'. Did you mean: 'output_info'?`
-
-   请使用以下代码替换 `dxcam` 中的 `__init__` 文件
-   ```python
-   import weakref
-   import time
-   from dxcam.dxcam import DXCamera, Output, Device
-   from dxcam.util.io import (
-      enum_dxgi_adapters,
-      get_output_metadata,
-   )
-
-
-   class Singleton(type):
-      _instances = {}
-
-      def __call__(cls, *args, **kwargs):
-         if cls not in cls._instances:
-               cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
-         else:
-               print(f"Only 1 instance of {cls.__name__} is allowed.")
-
-         return cls._instances[cls]
-
-
-   class DXFactory(metaclass=Singleton):
-
-      _camera_instances = weakref.WeakValueDictionary()
-
-      def __init__(self) -> None:
-         p_adapters = enum_dxgi_adapters()
-         self.devices, self.outputs = [], []
-         for p_adapter in p_adapters:
-               device = Device(p_adapter)
-               p_outputs = device.enum_outputs()
-               if len(p_outputs) != 0:
-                  self.devices.append(device)
-                  self.outputs.append([Output(p_output) for p_output in p_outputs])
-         self.output_metadata = get_output_metadata()
-
-      def create(
-         self,
-         device_idx: int = 0,
-         output_idx: int = None,
-         region: tuple = None,
-         output_color: str = "RGB",
-         max_buffer_len: int = 64,
-      ):
-         device = self.devices[device_idx]
-         if output_idx is None:
-               # Select Primary Output
-               output_idx = [
-                  idx
-                  for idx, metadata in enumerate(
-                     self.output_metadata.get(output.devicename)
-                     for output in self.outputs[device_idx]
-                  )
-                  if metadata[1]
-               ][0]
-         instance_key = (device_idx, output_idx)
-         if instance_key in self._camera_instances:
-               print(
-                  "".join(
-                     (
-                           f"You already created a DXCamera Instance for Device {device_idx}--Output {output_idx}!\n",
-                           "Returning the existed instance...\n",
-                           "To change capture parameters you can manually delete the old object using `del obj`.",
-                     )
-                  )
-               )
-               return self._camera_instances[instance_key]
-
-         output = self.outputs[device_idx][output_idx]
-         output.update_desc()
-         camera = DXCamera(
-               output=output,
-               device=device,
-               region=region,
-               output_color=output_color,
-               max_buffer_len=max_buffer_len,
-         )
-         self._camera_instances[instance_key] = camera
-         time.sleep(0.1)  # Fix for https://github.com/ra1nty/DXcam/issues/31
-         return camera
-
-      def device_info(self) -> str:
-         ret = ""
-         for idx, device in enumerate(self.devices):
-               ret += f"Device[{idx}]:{device}\n"
-         return ret
-
-      def output_info(self) -> str:
-         ret = ""
-         for didx, outputs in enumerate(self.outputs):
-               for idx, output in enumerate(outputs):
-                  ret += f"Device[{didx}] Output[{idx}]: "
-                  ret += f"Res:{output.resolution} Rot:{output.rotation_angle}"
-                  ret += f" Primary:{self.output_metadata.get(output.devicename)[1]}\n"
-         return ret
-
-      def output_res(self):
-         res = []
-         for didx, outputs in enumerate(self.outputs):
-               for idx, output in enumerate(outputs):
-                  res.append(output.resolution)
-         return res
-
-      def clean_up(self):
-         for _, camera in self._camera_instances.items():
-               camera.release()
-
-
-   __factory = DXFactory()
-
-
-   def create(
-      device_idx: int = 0,
-      output_idx: int = None,
-      region: tuple = None,
-      output_color: str = "RGB",
-      max_buffer_len: int = 64,
-   ):
-      return __factory.create(
-         device_idx=device_idx,
-         output_idx=output_idx,
-         region=region,
-         output_color=output_color,
-         max_buffer_len=max_buffer_len,
-      )
-
-
-   def device_info():
-      return __factory.device_info()
-
-
-   def output_info():
-      return __factory.output_info()
-
-   def output_res():
-      return __factory.output_res()
-   ```
+   - `windows-capture` 需要 Windows 10 1903 及以上；Windows 10 上系统会强制显示捕获黄边框，
+     Windows 11 可通过 `draw_border=False` 去除。
+   - DXGI 系后端（bettercam）要求显示缩放为 100%，否则会自动切换到 `mss`。
+   - DXGI/WGC 只在画面变化时产生新帧，静止画面下 `get_image()` 返回 `None` 属正常行为。
 
 ### Frequently Asked Questions
 
-1. TensorRT related problems
+1. TensorRT / CUDA problems
 
    `FileNotFoundError: Could not find: nvinfer.dll. Is it on your PATH?`
 
-   `FileNotFoundError: Could not find: cudnn64_8.dll. Is it on your PATH?`
+   `...cublasLt64_13.dll / cudnn64_9.dll which is missing`
 
-   `Could not find module 'C:\...\nvinfer_plugin.dll`
+   The modern stack (TensorRT 10/11 + onnxruntime-gpu 1.2x) needs no manual PATH setup:
+   - just `pip install tensorrt cuda-python onnxruntime-gpu` (CUDA 13 runtime DLLs ship with torch);
+   - at startup `deadeye/detection_module/cuda_env.py` auto-registers `site-packages/nvidia/**/bin` and `torch/lib` on the DLL search path;
+   - if DLLs are still missing, make sure the packages are installed **in the environment you run with** (`pip list | grep -i "onnx\|tensorrt\|torch"`); the legacy TensorRT 8.6 flow (manual `nvinfer.dll` PATH) is incompatible with RTX 50-series GPUs.
 
-   See comments and environment notes near `deadeye/detection_module/tensorrt_engine.py` (legacy filenames in old docs may differ from the current tree).
+2. Screen capture backends
 
-2. DxCam related problems
+   The legacy `dxcam` error `AttributeError: module 'dxcam' has no attribute 'output_res'`
+   came from dxcam being unmaintained. `dxcam` has been removed in favor of an automatic
+   fallback chain: `windows-capture` (default) -> `bettercam` -> `mss`. You can also pick a
+   specific backend in the UI input-module settings.
 
-   'AttributeError: module 'dxcam' has no attribute 'output_res'. Did you mean: 'output_info'?'
-
-   Please replace the `__init__` file in `dxcam` with the above python code.
+   - `windows-capture` requires Windows 10 1903+; on Windows 10 the OS enforces a yellow
+     capture border, removable via `draw_border=False` on Windows 11.
+   - DXGI-based backends (bettercam) require display scaling to be 100%, otherwise the
+     helper falls back to `mss`.
+   - DXGI/WGC only produce new frames when the screen content changes; `get_image()`
+     returning `None` on a static screen is expected.
 
 
 ## 使用须知
@@ -347,18 +294,26 @@ Welcome to use the files in this repository. Before using any files in this repo
 在开发本项目的过程中,我参考了以下优秀的开源项目。在此对这些项目的贡献者表示感谢!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): YOLOv7 的官方实现。
-- [YOLOv8](https://github.com/ultralytics/ultralytics): YOLOv8 的官方实现。
+- [YOLOv8](https://github.com/ultralytics/ultralytics): YOLOv8 的官方实现（亦为 v11 / v12 / 26 提供训练与导出）。
+- [Ultralytics YOLO11](https://docs.ultralytics.com/models/yolo11/): YOLO11 官方文档。
+- [Ultralytics YOLO26](https://docs.ultralytics.com/models/yolo26/): YOLO26 官方文档（端到端免 NMS 检测头）。
 - [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): 一个全面的 TensorRT 部署 YOLO 系列模型的项目。
 - [wang2024yolov10](https://github.com/THU-MIG/yolov10): YOLOv10 的官方实现。
+- [windows-capture](https://github.com/NiiightmareXD/windows-capture): 基于 Windows.Graphics.Capture 的高速截屏库（本项目的默认截屏后端）。
+- [BetterCam](https://github.com/RootKit-Org/BetterCam): dxcam 的社区维护分支（DXGI Desktop Duplication 截屏备选后端）。
 
 ## Reference Projects
 
 During the development of this project, I referenced the following excellent open-source projects. I would like to express our gratitude to the contributors of these projects!
 
 - [YOLOv7](https://github.com/WongKinYiu/yolov7): The official implementation of YOLOv7.
-- [YOLOv8](https://github.com/ultralytics/ultralytics): The official implementation of YOLOv8.
+- [YOLOv8](https://github.com/ultralytics/ultralytics): The official implementation of YOLOv8 (also provides training/export for v11 / v12 / 26).
+- [Ultralytics YOLO11](https://docs.ultralytics.com/models/yolo11/): Official YOLO11 documentation.
+- [Ultralytics YOLO26](https://docs.ultralytics.com/models/yolo26/): Official YOLO26 documentation (end-to-end NMS-free detection head).
 - [TensorRT-For-YOLO-Series](https://github.com/Linaom1214/TensorRT-For-YOLO-Series): A comprehensive project for deploying YOLO series models with TensorRT.
 - [wang2024yolov10](https://github.com/THU-MIG/yolov10): The official implementation of YOLOv10.
+- [windows-capture](https://github.com/NiiightmareXD/windows-capture): Fast Windows.Graphics.Capture library (the default screen-capture backend of this project).
+- [BetterCam](https://github.com/RootKit-Org/BetterCam): Community-maintained dxcam fork (DXGI Desktop Duplication fallback backend).
 
 ## 开源许可
 

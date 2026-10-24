@@ -87,6 +87,8 @@ class DeadEyeCore:
                             print('输入流已结束，自动暂停。')
                             self.if_paused = True
                             break
+                        # 无新帧时短暂让出 CPU，避免忙等抢占 GIL 饿死截屏回调线程
+                        time.sleep(0.001)
                         continue
 
                     self.image = image

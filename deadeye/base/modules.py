@@ -65,8 +65,8 @@ class MouseControlModule:
 
 
 class BaseCamera:
-    def __init__(self):
-        raise NotImplementedError('Subclass must implement this method.')
-
     def get_image(self):
         raise NotImplementedError('Subclass must implement this method.')
+
+    def on_exit(self):
+        pass

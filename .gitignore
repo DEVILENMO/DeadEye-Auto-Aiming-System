@@ -1,13 +1,14 @@
 .idea
 build
 
-test.py
-memo.txt
-
-weights/apex_v8s.onnx
-weights/apex_v8s.pt
-weights/apex_v8s.trt
-weights/apex_v8s_fp32.trt
-weights/apex_v8s.engine
-
+__pycache__/
+*.pyc
 *.pyd
+.pytest_cache/
+
+# TensorRT 引擎为本机构建产物（硬件/TRT 版本相关），用 tools/build_engines.py 重建
+*.engine
+*.plan
+*.trt
+*.engine.json
+*.timecache
