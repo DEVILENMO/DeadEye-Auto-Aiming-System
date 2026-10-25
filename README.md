@@ -1,19 +1,27 @@
-# DeadEye 辅助瞄准系统 / DeadEye Auto Aiming System
+# DeadEye 通用视觉目标定位与追踪系统框架
+
+/ DeadEye: A Universal Visual Target Localization & Tracking Framework
 
 <img src="res/DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
 
-DeadEye 目标追踪系统是一款高性能的图像辅助目标追踪工具。作为示例，提供了在FPS游戏中的目标追踪以及对应的瞄准效果演示。示例程序通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。不仅如此，我还将这个系统应用在光学激光控制和监控探头的目标追踪中，虽然这些领域的示例程序没有提供，但用户可以通过简单修改相关模块，将这个系统应用于不同领域。
+DeadEye 是一个**通用的视觉目标定位与追踪系统框架**：模块化流水线「输入 → 检测 → 追踪 → 执行」，检测层以可插拔后端覆盖 YOLOv5/v7/v8/v11/v12/26 的完整 CUDA 部署链（ONNX Runtime CUDA EP / TensorRT + CUDA Graph，RTX 5090 实测端到端 789–1200 FPS），追踪层提供 IoU 匈牙利匹配、卡尔曼滤波与可配置的目标生命周期，执行层把定位结果对接到任意下游动作。
 
-DeadEye target tracking system is a high-performance image-assisted target tracking tool. As an example, it provides a demonstration of target tracking and corresponding aiming effects in FPS games. The sample program analyzes screenshots, detects and tracks targets, and finally implements assisted aiming and automatic trigger functions through simulated operations. Additionally, I have applied this system to optical laser control and monitoring target tracking. Although sample programs for these fields are not provided, users can apply this system in different domains by simply modifying the corresponding modules.
+作为示例，仓库提供了 FPS 游戏屏幕目标追踪与辅助瞄准的效果演示（通过分析屏幕截图检测并追踪目标，再由模拟操作实现辅助瞄准与自动扳机）。同样的框架我已应用在光学激光控制与监控探头目标追踪中——这些领域的示例程序未随仓库提供，但只需替换或扩展对应模块，即可把 DeadEye 组装到任何"看得见、框得住、要跟随"的任务上。
+
+DeadEye is a **universal visual target localization & tracking framework**: a modular pipeline (*input → detection → tracking → execution*) where the detection layer ships pluggable backends covering the full CUDA deployment chain of YOLOv5/v7/v8/v11/v12/26 (ONNX Runtime CUDA EP / TensorRT + CUDA Graph, measured 789–1200 FPS end-to-end on an RTX 5090), the tracking layer provides IoU-cost Hungarian matching, Kalman filtering and a configurable target lifecycle, and the execution layer connects localization results to arbitrary downstream actions.
+
+As a showcase, the repository includes an FPS screen-tracking & aim-assist demo (detect and track targets from screen captures, then drive simulated aiming/trigger actions). I have also deployed the same framework to optical laser control and surveillance-camera target tracking — those samples are not included, but by swapping or extending the corresponding modules, DeadEye can be assembled onto any task that needs to "see, localize and follow".
 
 ## 近期更新（2026）
 
-- **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
+- **检测与 CUDA 部署重构（2026-10）**：检测模块重构为「统一检测器 + 可插拔推理后端」架构（`deadeye/detection_module/backends/`）：
+  - **模型支持**：YOLOv5 / v7 / v8 / v11 / v12 / 26 一套代码覆盖；后处理按输出布局自动解码（v5/v7 含 objectness 头、v8/v11/v12 解码头、v10/v26 端到端免 NMS 头），优先使用 Ultralytics 导出元数据消歧。
   - **推理后端**：`.pt` → Ultralytics（torch）；`.onnx` → ONNX Runtime CUDA EP（IOBinding 稳态零分配，无 GPU 自动回退 CPU）；`.engine` / `.plan` / `.trt` → 原生 TensorRT 10/11 后端（cuda-python + pinned 显存预分配 + 非默认流）。
   - **引擎工具链**：`tools/export_yolo.py`（pt → ONNX/engine）、`tools/convert_fp16.py`（FP16 混合精度转换）、`tools/build_engines.py`（ONNX → FP16 引擎，timing cache + 元数据 sidecar + 过期自动重建）、`tools/benchmark.py`（预处理/推理/后处理分项基准）。TensorRT 后端默认启用 CUDA Graph，RTX 5090 实测端到端 789–1200 FPS（见下方**性能基准**）。
   - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
   - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
 - **目标追踪重构（2026-10）**：追踪逻辑独立为 `TargetTracker`——IoU 代价 + 类别/IoU 双门控的向量化匈牙利匹配（关联用 KF 预测框）、8 维等速卡尔曼滤波真正接入预测-更新闭环、目标生命周期可配置（漏检 N 帧保留同 ID / 连续 M 帧确认，UI「追踪参数」面板），消除单帧漏检导致的 ID 跳变；详见目标追踪章节。
+- **仓库定位调整（2026-10）**：DeadEye 定位为**通用视觉目标定位与追踪系统框架**——FPS 辅助瞄准作为示例应用保留，框架本身面向任意「检测-定位-追踪-执行」任务（光学激光控制、监控追踪等）。
 - **资源目录整理（2026-10）**：静态资源统一收纳到 `res/`（封面、演示动图、示例图片 `res/images/`、示例视频 `res/videos/`）；默认路径改为锚定仓库根目录（`deadeye/paths.py`），与运行时 CWD 无关；模型权重默认路径在 `weights/`，示例输出保留在 `output/`。
 - **截屏后端升级（2026-10）**：`dxcam` 已停止维护且与新版本不兼容，移除；截屏改为 `windows-capture`（Windows.Graphics.Capture）→ `bettercam`（DXGI）→ `mss`（GDI）自动降级链，详见输入模块章节。
 - **流水线**：`DeadEyeCore`（`deadeye/core/dead_eye_core.py`）中数据流为：输入源取帧 → `DetectModule.target_detect` → 匈牙利匹配与卡尔曼更新 `Target` 列表 → 依次调用各 **`ExecutionModule.update_targets(frame, target_list)`**。
@@ -34,6 +42,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
   - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
   - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
 - **Target tracking rewrite (Oct 2026)**: tracking extracted into `TargetTracker` — vectorized Hungarian matching over IoU cost with class/IoU gating (association on KF-predicted boxes), an 8-state constant-velocity Kalman filter actually wired into the predict-update loop, and configurable target lifecycle (missed-frame retention with stable IDs / min-hits confirmation, via the UI **Tracking** panel), eliminating single-miss ID churn. See the target tracking section.
+- **Repositioning (Oct 2026)**: DeadEye is now framed as a **universal visual target localization & tracking framework** — the FPS aim assist stays as a sample application, while the framework itself targets any detect-localize-track-act task (optical laser control, surveillance tracking, etc.).
 - **Resource layout (Oct 2026)**: static assets consolidated under `res/` (cover image, demo GIF, sample images `res/images/`, sample videos `res/videos/`); default paths are anchored to the repo root (`deadeye/paths.py`), independent of the runtime CWD; model weights default to `weights/`, sample output kept in `output/`.
 - **Screen-capture upgrade (Oct 2026)**: `dxcam` (unmaintained) removed; capture now falls back automatically `windows-capture` (Windows.Graphics.Capture) → `bettercam` (DXGI) → `mss` (GDI). See the input module section.
 - **Pipeline**: In `DeadEyeCore` (`deadeye/core/dead_eye_core.py`), the flow is: grab a frame from the input camera → `DetectModule.target_detect` → Hungarian matching + Kalman updates on `Target` → each **`ExecutionModule.update_targets(frame, target_list)`** in order.
@@ -47,6 +56,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ## 特性
 
+- **通用框架**: 「输入 → 检测 → 追踪 → 执行」四段式模块化流水线（`input_module` / `detection_module` / `TargetTracker` / `execution_module`），各层均可按基类扩展替换，适配任意视觉目标定位与追踪任务。
 - **高速截图**: 使用 ScreenShotHelper 类快速截取屏幕图像，并自动适配不同的屏幕分辨率。
 - **多版本 YOLO 检测**: `YoloDetector` 继承于 `DetectModule` 基类，一套代码支持 **YOLOv5 / v7 / v8 / v11 / v12 / 26**；输出头自动识别解码，训练权重（`.pt`）、ONNX（CUDA EP）与 TensorRT 引擎（`.engine` / `.plan` / `.trt`）三种部署格式自动分发。
 - **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT + CUDA Graph 端到端 **789–1200 FPS**。
@@ -57,6 +67,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
 
 ## Features
 
+- **Universal framework**: a four-stage modular pipeline (*input → detection → tracking → execution*; `input_module` / `detection_module` / `TargetTracker` / `execution_module`), every layer extensible via its base class for any visual target localization & tracking task.
 - **High-speed Screenshot**: Uses the ScreenShotHelper class to quickly capture screen images and automatically adapts to different screen resolutions.
 - **Multi-generation YOLO detection**: `YoloDetector` derives from `DetectModule` and supports **YOLOv5 / v7 / v8 / v11 / v12 / 26** in one code base; output heads are auto-decoded, and training weights (`.pt`), ONNX (CUDA EP) and TensorRT engines (`.engine` / `.plan` / `.trt`) are dispatched automatically.
 - **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **789–1200 FPS end-to-end** with TensorRT + CUDA Graph on an RTX 5090.
