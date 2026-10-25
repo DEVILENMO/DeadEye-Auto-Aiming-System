@@ -12,3 +12,6 @@ __pycache__/
 *.trt
 *.engine.json
 *.timecache
+
+# apex 系列检测模型不公开（本地保留，不入库）
+weights/apex*
