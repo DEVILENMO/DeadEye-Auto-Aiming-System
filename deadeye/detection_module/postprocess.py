@@ -48,15 +48,16 @@ def detect_output_layout(output: np.ndarray, end2end_meta: bool | None = None) -
     if end2end_meta is True:
         return 'end2end'
     if end2end_meta is False:
-        # v8 系解码头 channels 在前且数量有限；v5/v7 系每行 5+nc 列
-        return 'v8' if rows <= 64 else 'v5_v7'
+        # Ultralytics 导出（nms=False）恒为 channels-first 解码头，与类别数无关
+        # （COCO 80 类的 [4+80, anchors] 不能按行数启发式误判为 v5/v7）
+        return 'v8'
 
-    # 无元数据时按形状启发式
+    # 无元数据时按形状启发式：anchor 维是较大的那一维
     if cols == 6 and rows <= _E2E_MAX_CANDIDATES:
         return 'end2end'
-    if rows <= 64 and cols > 64:
+    if rows < cols and rows <= 4 + 200:
         return 'v8'
-    if cols > 6:
+    if cols < rows and cols <= 5 + 200:
         return 'v5_v7'
     raise ValueError(f'无法识别的输出张量布局: shape={output.shape}')
 

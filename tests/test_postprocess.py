@@ -37,6 +37,17 @@ def test_layout_metadata_overrides_shape():
     assert detect_output_layout(np.zeros((6, 1344)), end2end_meta=True) == 'end2end'
 
 
+def test_layout_v8_coco80_by_metadata():
+    """回归：COCO 80 类 v8 头 [84, 8400]，行数超过旧阈值时曾被误判为 v5/v7。"""
+    assert detect_output_layout(np.zeros((84, 8400)), end2end_meta=False) == 'v8'
+
+
+def test_layout_no_metadata_coco_shapes():
+    # 无元数据：anchor 维是较大维
+    assert detect_output_layout(np.zeros((84, 8400))) == 'v8'
+    assert detect_output_layout(np.zeros((25200, 85))) == 'v5_v7'
+
+
 # ---------------------------------------------------------------- v8/v11 解码
 
 def test_decode_v8_single_box():
