@@ -1,6 +1,4 @@
-# DeadEye 通用视觉目标定位与追踪系统框架
-
-/ DeadEye: A Universal Visual Target Localization & Tracking Framework
+# DeadEye 通用视觉目标定位与追踪系统框架 / DeadEye: Universal Visual Target Localization & Tracking Framework
 
 <img src="res/DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
 
