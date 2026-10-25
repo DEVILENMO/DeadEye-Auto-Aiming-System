@@ -1,6 +1,6 @@
 # DeadEye 辅助瞄准系统 / DeadEye Auto Aiming System
 
-<img src="DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
+<img src="res/DeadEye.png" alt="DeadEye" style="width: 100%; height: auto;"/>
 
 DeadEye 目标追踪系统是一款高性能的图像辅助目标追踪工具。作为示例，提供了在FPS游戏中的目标追踪以及对应的瞄准效果演示。示例程序通过分析屏幕截图，检测并追踪目标，最后通过模拟操作实现辅助瞄准和自动扳机功能。不仅如此，我还将这个系统应用在光学激光控制和监控探头的目标追踪中，虽然这些领域的示例程序没有提供，但用户可以通过简单修改相关模块，将这个系统应用于不同领域。
 
@@ -14,6 +14,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
   - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
   - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
 - **目标追踪重构（2026-10）**：追踪逻辑独立为 `TargetTracker`——IoU 代价 + 类别/IoU 双门控的向量化匈牙利匹配（关联用 KF 预测框）、8 维等速卡尔曼滤波真正接入预测-更新闭环、目标生命周期可配置（漏检 N 帧保留同 ID / 连续 M 帧确认，UI「追踪参数」面板），消除单帧漏检导致的 ID 跳变；详见目标追踪章节。
+- **资源目录整理（2026-10）**：静态资源统一收纳到 `res/`（封面、演示动图、示例图片 `res/images/`、示例视频 `res/videos/`）；默认路径改为锚定仓库根目录（`deadeye/paths.py`），与运行时 CWD 无关；模型权重默认路径在 `weights/`，示例输出保留在 `output/`。
 - **截屏后端升级（2026-10）**：`dxcam` 已停止维护且与新版本不兼容，移除；截屏改为 `windows-capture`（Windows.Graphics.Capture）→ `bettercam`（DXGI）→ `mss`（GDI）自动降级链，详见输入模块章节。
 - **流水线**：`DeadEyeCore`（`deadeye/core/dead_eye_core.py`）中数据流为：输入源取帧 → `DetectModule.target_detect` → 匈牙利匹配与卡尔曼更新 `Target` 列表 → 依次调用各 **`ExecutionModule.update_targets(frame, target_list)`**。
 - **目录规范**：业务模块目录统一为 `*_module`：`deadeye/input_module`、`deadeye/detection_module`、`deadeye/execution_module`（原 `input` / `detection` / `aim` / `output` 已调整；`VideoWriterOutput` 已并入 `execution_module`）。
@@ -33,6 +34,7 @@ DeadEye target tracking system is a high-performance image-assisted target track
   - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
   - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
 - **Target tracking rewrite (Oct 2026)**: tracking extracted into `TargetTracker` — vectorized Hungarian matching over IoU cost with class/IoU gating (association on KF-predicted boxes), an 8-state constant-velocity Kalman filter actually wired into the predict-update loop, and configurable target lifecycle (missed-frame retention with stable IDs / min-hits confirmation, via the UI **Tracking** panel), eliminating single-miss ID churn. See the target tracking section.
+- **Resource layout (Oct 2026)**: static assets consolidated under `res/` (cover image, demo GIF, sample images `res/images/`, sample videos `res/videos/`); default paths are anchored to the repo root (`deadeye/paths.py`), independent of the runtime CWD; model weights default to `weights/`, sample output kept in `output/`.
 - **Screen-capture upgrade (Oct 2026)**: `dxcam` (unmaintained) removed; capture now falls back automatically `windows-capture` (Windows.Graphics.Capture) → `bettercam` (DXGI) → `mss` (GDI). See the input module section.
 - **Pipeline**: In `DeadEyeCore` (`deadeye/core/dead_eye_core.py`), the flow is: grab a frame from the input camera → `DetectModule.target_detect` → Hungarian matching + Kalman updates on `Target` → each **`ExecutionModule.update_targets(frame, target_list)`** in order.
 - **Package layout**: Module folders are named `*_module`: `deadeye/input_module`, `deadeye/detection_module`, `deadeye/execution_module` (replacing the old `input` / `detection` / `aim` / `output` layout; `VideoWriterOutput` now lives under `execution_module`).
@@ -231,7 +233,7 @@ Examples include `DeadEyeAutoAimingModule` (PID aim assist) and `VideoWriterOutp
 
 The following animation demonstrates the aiming assist effect provided by this project:
 
-![辅助瞄准效果演示 / Aiming Assist Effect Demonstration](./effect_test.gif)
+![辅助瞄准效果演示 / Aiming Assist Effect Demonstration](./res/effect_test.gif)
 
 ### 注意事项
 

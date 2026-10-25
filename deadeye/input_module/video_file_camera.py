@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 
 from deadeye.base.modules import BaseCamera
+from deadeye import paths
 from deadeye.base.configurable import ConfigurableMixin
 
 
@@ -22,6 +23,12 @@ def _center_crop_or_resize(frame_bgr: np.ndarray, out_w: int, out_h: int) -> np.
     return frame_bgr[y1:y1 + out_h, x1:x1 + out_w].copy()
 
 
+def _default_video_path() -> str:
+    """默认指向 res/videos 下的示例视频（不存在则留空由用户选择）。"""
+    candidate = paths.res_path('videos', 'aimlab_test.mp4')
+    return candidate if os.path.isfile(candidate) else ''
+
+
 class VideoFileCamera(BaseCamera, ConfigurableMixin):
     """
     从单个视频文件读取帧；每帧中心裁剪/缩放到 view_range，输出 RGB（与截屏相机一致）。
@@ -31,7 +38,7 @@ class VideoFileCamera(BaseCamera, ConfigurableMixin):
     def declare_config(cls) -> None:
         cls.register_path(
             'video_path',
-            '',
+            _default_video_path(),
             label='视频文件',
             filetypes=[
                 ('视频', '*.mp4 *.avi *.mov *.mkv *.webm *.m4v'),

@@ -7,6 +7,7 @@ import numpy as np
 
 from deadeye.base.modules import ExecutionModule, Target
 from deadeye.base.configurable import ConfigurableMixin
+from deadeye import paths
 
 
 class VideoWriterOutput(ExecutionModule, ConfigurableMixin):
@@ -16,7 +17,7 @@ class VideoWriterOutput(ExecutionModule, ConfigurableMixin):
 
     @classmethod
     def declare_config(cls) -> None:
-        cls.register_path('output_path', os.path.abspath(os.path.join('.', 'output', 'annotated.mp4')), label='输出视频路径')
+        cls.register_path('output_path', paths.output_path('annotated.mp4'), label='输出视频路径')
         cls.register_choice('fourcc', 'mp4v', label='编码器', choices=['mp4v', 'XVID'])
 
     def __init__(

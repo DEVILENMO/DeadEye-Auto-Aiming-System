@@ -17,6 +17,7 @@ import time
 
 from deadeye.base.modules import DetectModule
 from deadeye.base.configurable import ConfigurableMixin
+from deadeye import paths
 from deadeye.detection_module.backends.base import BaseInferBackend
 from deadeye.detection_module.backends.onnx_backend import OnnxRuntimeBackend
 from deadeye.detection_module.backends.tensorrt_backend import ENGINE_EXTS, TensorRTBackend
@@ -29,9 +30,9 @@ ULTRALYTICS_EXTS = ('.pt',)
 
 def _default_model_path() -> str:
     candidates = [
-        os.path.abspath(os.path.join('.', 'weights', 'apex_v11s_320.onnx')),
-        os.path.abspath(os.path.join('.', 'weights', 'apex_v26s_320.onnx')),
-        os.path.abspath(os.path.join('.', 'weights', 'best.pt')),
+        paths.weights_path('apex_v11s_320.onnx'),
+        paths.weights_path('apex_v26s_320.onnx'),
+        paths.weights_path('best.pt'),
     ]
     for path in candidates:
         if os.path.isfile(path):

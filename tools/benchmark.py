@@ -7,7 +7,7 @@
 用法示例：
     python tools/benchmark.py                                      # 扫描 weights/*.onnx
     python tools/benchmark.py weights/test_v11s_320.onnx --frames 200
-    python tools/benchmark.py weights/test_v26s_320.onnx --video test_vedios/aimlab_test.mp4
+    python tools/benchmark.py weights/test_v26s_320.onnx --video res/videos/aimlab_test.mp4
     python tools/benchmark.py weights/test_v11s_320.onnx --engine   # 额外测 TRT 引擎（自动构建）
 """
 import argparse
@@ -22,13 +22,14 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from deadeye import paths  # noqa: E402
 from deadeye.detection_module.backends.onnx_backend import OnnxRuntimeBackend  # noqa: E402
 from deadeye.detection_module.backends.tensorrt_backend import ensure_engine  # noqa: E402
 from deadeye.detection_module.postprocess import decode_detections  # noqa: E402
 from deadeye.detection_module.preprocess import Letterboxer  # noqa: E402
 
-DEFAULT_VIDEO = os.path.join('test_vedios', 'aimlab_test.mp4')
-DEFAULT_IMAGE = os.path.join('test_imgs', 'apex_test1.png')
+DEFAULT_VIDEO = paths.res_path('videos', 'aimlab_test.mp4')
+DEFAULT_IMAGE = paths.res_path('images', 'apex_test1.png')
 
 
 def load_frames(video_path: str, count: int, target_size: int) -> list[np.ndarray]:
