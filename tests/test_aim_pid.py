@@ -14,7 +14,7 @@ def make_module(**overrides):
         shaping='linear', atan_slope=1.0, atan_ceiling=300.0,
         velocity_gain_schedule=0.0,
         velocity_feedforward_x=0.0, velocity_feedforward_y=0.0,
-        rebound_strength=0.0, max_movement=100000,
+        rebound_strength=0.0, max_movement=100000, max_step_per_frame=0.0,
     )
     params.update(overrides)
     return DeadEyeAutoAimingModule(VIEW, enable_auto_aim=False, enable_auto_shoot=False, **params)
@@ -139,3 +139,32 @@ def test_atan_shaping_monotonic():
         x_r, _ = mod.calculate_mouse_movement_by_pid((100 + e, 100), (100, 100))
         outputs.append(x_r)
     assert outputs == sorted(outputs) and all(v > 0 for v in outputs)
+
+
+# ---------------------------------------------------------------- 输出限速
+
+def test_step_limit_caps_flick_speed():
+    """限速生效：大误差输出被截到 max_step_per_frame，小误差不受影响。"""
+    mod = make_module(max_step_per_frame=15.0)
+    x_big, _ = mod.calculate_mouse_movement_by_pid((10000, 100), (100, 100))
+    assert x_big == pytest.approx(15.0)
+    x_small, _ = mod.calculate_mouse_movement_by_pid((112, 100), (100, 100))
+    assert x_small == pytest.approx(0.5 * 12)
+
+
+def test_step_limit_zero_disables_cap():
+    mod = make_module(max_step_per_frame=0.0)
+    x_r, _ = mod.calculate_mouse_movement_by_pid((10000, 100), (100, 100))
+    assert x_r == pytest.approx(0.5 * 9900)
+
+
+# ---------------------------------------------------------------- 默认参数
+
+def test_default_gains_match_tuned_preset():
+    """默认增益对齐实战调参组合：Kp≈Ki（积分主导）、Kd 极小、Y 轴微分关闭、限速 15px/帧。"""
+    defaults = {f.key: f.default for f in DeadEyeAutoAimingModule.get_config_spec()}
+    assert defaults['k_p'] == pytest.approx(0.3)
+    assert defaults['k_i'] == pytest.approx(0.3)
+    assert defaults['k_d'] == pytest.approx(0.01)
+    assert defaults['k_d_y'] == pytest.approx(0.0)
+    assert defaults['max_step_per_frame'] == pytest.approx(15.0)

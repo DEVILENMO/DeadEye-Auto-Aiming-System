@@ -22,10 +22,11 @@ class SimpleMouseController(MouseControlModule):
         print('You are required to implement a mouse move function yourself')
 
 
-DEFAULT_P = 0.5
-DEFEULT_I = 0.2
-DEFAULT_D = 0.05
+DEFAULT_P = 0.3
+DEFEULT_I = 0.3
+DEFAULT_D = 0.01
 DEFAULT_R = 0.5
+DEFAULT_MAX_STEP = 15.0
 
 
 class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
@@ -51,6 +52,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_float('auto_aim_range_y', 1.5, label='瞄准范围 Y', min_value=0.1, max_value=10.0, step=0.1)
         cls.register_float('aim_sensitive', 1.0, label='灵敏度', min_value=0.1, max_value=10.0, step=0.1)
         cls.register_int('max_movement', 320, label='最大移动', min_value=1, max_value=5000, step=1)
+        cls.register_float('max_step_per_frame', DEFAULT_MAX_STEP, label='输出限速(px/帧)', min_value=0.0, max_value=200.0, step=1.0)
         cls.register_float('k_p', DEFAULT_P, label='PID Kp', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('k_i', DEFEULT_I, label='PID Ki', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('k_d', DEFAULT_D, label='PID Kd(X轴)', min_value=0.0, max_value=10.0, step=0.01)
@@ -75,6 +77,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         auto_aim_range_y: float = 1.5,
         aim_sensitive: float = 1.0,
         max_movement: int = 320,
+        max_step_per_frame: float = DEFAULT_MAX_STEP,
         k_p: float = DEFAULT_P,
         k_i: float = DEFEULT_I,
         k_d: float = DEFAULT_D,
@@ -103,6 +106,8 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.last_auto_shoot_time = time.time()
 
         self.max_movement = int(max_movement)
+        # 输出限速：输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板（0=关闭）
+        self.max_step_per_frame = float(max_step_per_frame)
         self.k_p = float(k_p)
         self.k_i = float(k_i)
         self.k_d = float(k_d)
@@ -310,6 +315,14 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
             x_r = x_r / abs(x_r) * self.max_movement
         if abs(y_r) > self.max_movement:
             y_r = y_r / abs(y_r) * self.max_movement
+
+        # 输出限速（甩枪速度上限，平滑由 atan 整形保证，这里只做硬顶）
+        if self.max_step_per_frame > 0:
+            cap = self.max_step_per_frame
+            if abs(x_r) > cap:
+                x_r = x_r / abs(x_r) * cap
+            if abs(y_r) > cap:
+                y_r = y_r / abs(y_r) * cap
 
         self.previous_time = current_time
         self.previous_distance_x = distance_x
