@@ -19,6 +19,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
   - **CUDA 运行库自举**：`deadeye/detection_module/cuda_env.py` 在 Windows 上自动注册 pip 安装的 NVIDIA 包与 torch/lib 中的 CUDA DLL，无需手动配置 PATH。
   - **单元测试**：`tests/test_postprocess.py` 覆盖三种输出头解码、letterbox 坐标逆映射与 NMS。
 - **目标追踪重构（2026-10）**：追踪逻辑独立为 `TargetTracker`——IoU 代价 + 类别/IoU 双门控的向量化匈牙利匹配（关联用 KF 预测框）、8 维等速卡尔曼滤波真正接入预测-更新闭环、目标生命周期可配置（漏检 N 帧保留同 ID / 连续 M 帧确认，UI「追踪参数」面板），消除单帧漏检导致的 ID 跳变；详见目标追踪章节。
+- **控制律升级（2026-10）**：辅助瞄准在 PID 基础上引入死区（消除末端微抖）、Y 轴微分独立参数（默认关闭）、基于卡尔曼速度的连续增益调度与速度前馈（补偿目标运动相位滞后），全部参数经 UI 可调。
 - **仓库定位调整（2026-10）**：DeadEye 定位为**通用视觉目标定位与追踪系统框架**——FPS 辅助瞄准作为示例应用保留，框架本身面向任意「检测-定位-追踪-执行」任务（光学激光控制、监控追踪等）。
 - **资源目录整理（2026-10）**：静态资源统一收纳到 `res/`（封面、演示动图、示例图片 `res/images/`、示例视频 `res/videos/`）；默认路径改为锚定仓库根目录（`deadeye/paths.py`），与运行时 CWD 无关；模型权重默认路径在 `weights/`，示例输出保留在 `output/`。
 - **截屏后端升级（2026-10）**：`dxcam` 已停止维护且与新版本不兼容，移除；截屏改为 `windows-capture`（Windows.Graphics.Capture）→ `bettercam`（DXGI）→ `mss`（GDI）自动降级链，详见输入模块章节。
@@ -40,6 +41,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
   - **CUDA runtime bootstrap**: `deadeye/detection_module/cuda_env.py` auto-registers CUDA DLLs from pip-installed NVIDIA packages and torch/lib on Windows — no manual PATH setup.
   - **Unit tests**: `tests/test_postprocess.py` covers all three output-head decoders, letterbox coordinate inversion and NMS.
 - **Target tracking rewrite (Oct 2026)**: tracking extracted into `TargetTracker` — vectorized Hungarian matching over IoU cost with class/IoU gating (association on KF-predicted boxes), an 8-state constant-velocity Kalman filter actually wired into the predict-update loop, and configurable target lifecycle (missed-frame retention with stable IDs / min-hits confirmation, via the UI **Tracking** panel), eliminating single-miss ID churn. See the target tracking section.
+- **Control-law upgrade (Oct 2026)**: the aim assist PID gains a deadband (kills terminal jitter), independent Y-axis derivative (off by default), Kalman-velocity-based continuous gain scheduling and velocity feed-forward (compensates target-motion phase lag) — all tunable from the UI.
 - **Repositioning (Oct 2026)**: DeadEye is now framed as a **universal visual target localization & tracking framework** — the FPS aim assist stays as a sample application, while the framework itself targets any detect-localize-track-act task (optical laser control, surveillance tracking, etc.).
 - **Resource layout (Oct 2026)**: static assets consolidated under `res/` (cover image, demo GIF, sample images `res/images/`, sample videos `res/videos/`); default paths are anchored to the repo root (`deadeye/paths.py`), independent of the runtime CWD; model weights default to `weights/`, sample output kept in `output/`.
 - **Screen-capture upgrade (Oct 2026)**: `dxcam` (unmaintained) removed; capture now falls back automatically `windows-capture` (Windows.Graphics.Capture) → `bettercam` (DXGI) → `mss` (GDI). See the input module section.
@@ -59,7 +61,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 - **多版本 YOLO 检测**: `YoloDetector` 继承于 `DetectModule` 基类，一套代码支持 **YOLOv5 / v7 / v8 / v11 / v12 / 26**；输出头自动识别解码，训练权重（`.pt`）、ONNX（CUDA EP）与 TensorRT 引擎（`.engine` / `.plan` / `.trt`）三种部署格式自动分发。
 - **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT + CUDA Graph 端到端 **789–1200 FPS**。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
-- **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用 PID 控制算法。
+- **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用「双轴 PID + 死区 + 速度前馈 + 增益调度」控制律：死区消除末端微抖，Y 轴微分独立可关（垂直抖动抑制），目标速度前馈（来自追踪层卡尔曼滤波）直接补偿运动滞后，Kp 随目标速度连续调度（无切换抖振）。
 - **易于扩展**: 可在 `input_module`、`detection_module`、`execution_module` 中按基类扩展；鼠标等行为由执行模块内 `MouseControlModule` 等实现，按需自行接入硬件或驱动。
 - **多语言UI**: 具有简单直观的用户界面,支持英文和简体中文两种语言,用户可以方便地切换语言或者增加新的语言支持。
 
@@ -70,7 +72,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 - **Multi-generation YOLO detection**: `YoloDetector` derives from `DetectModule` and supports **YOLOv5 / v7 / v8 / v11 / v12 / 26** in one code base; output heads are auto-decoded, and training weights (`.pt`), ONNX (CUDA EP) and TensorRT engines (`.engine` / `.plan` / `.trt`) are dispatched automatically.
 - **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **789–1200 FPS end-to-end** with TensorRT + CUDA Graph on an RTX 5090.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
-- **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a PID controller.
+- **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a dual-axis PID with deadband, velocity feed-forward (from the tracker's Kalman velocity estimate) and continuous gain scheduling; the Y-axis derivative is independently disablable for vertical jitter suppression.
 - **Easy to Extend**: Extend `input_module`, `detection_module`, and `execution_module` via their base classes; mouse or other actuation is wired inside execution modules (e.g. `MouseControlModule` patterns) for your own hardware.
 - **Multi-language UI**: Features a simple and intuitive user interface that supports both English and Simplified Chinese. Users can easily switch between languages or add support for new languages.
 

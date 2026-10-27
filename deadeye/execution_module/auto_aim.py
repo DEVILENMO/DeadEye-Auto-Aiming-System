@@ -28,6 +28,18 @@ DEFAULT_R = 0.5
 
 
 class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
+    """
+    PID 辅助瞄准执行模块。
+
+    控制结构（取长补短后的完整形态）：
+    - 死区：误差小于 deadzone 的轴不输出，消除准星末端微抖；
+    - 双轴 PID：X/Y 独立参数，Y 轴微分默认关闭（垂直框边缘抖动大，D 项易成噪声放大器）；
+    - 增益调度：Kp 随目标速度连续放大（Kp_eff = Kp·(1 + schedule·|v|)），避免离散切换的抖振；
+    - 速度前馈：out += vff · v_target，v_target 来自追踪层卡尔曼滤波的速度估计，
+      直接补偿目标运动带来的相位滞后，比加大 Kp 更不易过冲；
+    - 积分回弹：误差符号翻转时积分衰减（anti-windup），输出限幅 max_movement。
+    """
+
     @classmethod
     def declare_config(cls) -> None:
         cls.register_bool('enable_auto_aim', False, label='启动自动瞄准')
@@ -38,7 +50,13 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_int('max_movement', 320, label='最大移动', min_value=1, max_value=5000, step=1)
         cls.register_float('k_p', DEFAULT_P, label='PID Kp', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('k_i', DEFEULT_I, label='PID Ki', min_value=0.0, max_value=10.0, step=0.01)
-        cls.register_float('k_d', DEFAULT_D, label='PID Kd', min_value=0.0, max_value=10.0, step=0.01)
+        cls.register_float('k_d', DEFAULT_D, label='PID Kd(X轴)', min_value=0.0, max_value=10.0, step=0.01)
+        cls.register_float('k_d_y', 0.0, label='PID Kd(Y轴,默认关)', min_value=0.0, max_value=10.0, step=0.01)
+        cls.register_float('deadzone_x', 1.5, label='死区 X(px)', min_value=0.0, max_value=50.0, step=0.5)
+        cls.register_float('deadzone_y', 1.5, label='死区 Y(px)', min_value=0.0, max_value=50.0, step=0.5)
+        cls.register_float('velocity_gain_schedule', 0.0, label='增益调度(每px/frame速度)', min_value=0.0, max_value=2.0, step=0.01)
+        cls.register_float('velocity_feedforward_x', 0.0, label='速度前馈 X', min_value=0.0, max_value=2.0, step=0.01)
+        cls.register_float('velocity_feedforward_y', 0.0, label='速度前馈 Y', min_value=0.0, max_value=2.0, step=0.01)
         cls.register_float('rebound_strength', DEFAULT_R, label='回弹强度', min_value=0.0, max_value=1.0, step=0.01)
 
     def __init__(
@@ -54,6 +72,12 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         k_p: float = DEFAULT_P,
         k_i: float = DEFEULT_I,
         k_d: float = DEFAULT_D,
+        k_d_y: float = 0.0,
+        deadzone_x: float = 1.5,
+        deadzone_y: float = 1.5,
+        velocity_gain_schedule: float = 0.0,
+        velocity_feedforward_x: float = 0.0,
+        velocity_feedforward_y: float = 0.0,
         rebound_strength: float = DEFAULT_R,
     ):
         super().__init__()
@@ -73,6 +97,12 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.k_p = float(k_p)
         self.k_i = float(k_i)
         self.k_d = float(k_d)
+        self.k_d_y = float(k_d_y)
+        self.deadzone_x = float(deadzone_x)
+        self.deadzone_y = float(deadzone_y)
+        self.velocity_gain_schedule = float(velocity_gain_schedule)
+        self.velocity_feedforward_x = float(velocity_feedforward_x)
+        self.velocity_feedforward_y = float(velocity_feedforward_y)
         self.rebound_strength = float(rebound_strength)
         self.previous_time = None
         self.x_integral_value = 0
@@ -153,7 +183,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
             return 0, 0
         position_fixed = (round((aim_target.left_top[0] + aim_target.right_bottom[0]) * 0.5),
                           round((aim_target.left_top[1] + aim_target.right_bottom[1]) * 0.5))
-        x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y))
+        # 目标速度来自追踪层卡尔曼滤波（px/帧）：前馈与增益调度使用
+        target_velocity = (float(aim_target.kf.x[4]), float(aim_target.kf.x[5]))
+        x_r, y_r = self.calculate_mouse_movement_by_pid(position_fixed, (rel_mouse_x, rel_mouse_y), target_velocity)
         x_r = int(x_r * self.aim_sensitive)
         y_r = int(y_r * self.aim_sensitive)
 
@@ -171,13 +203,15 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
     def shoot(self):
         self.mouse_controller.click_left_button()
 
-    def set_pid_parameters(self, p=None, i=None, d=None, rebond_strength=None):
+    def set_pid_parameters(self, p=None, i=None, d=None, d_y=None, rebond_strength=None):
         if p is not None:
             self.k_p = p
         if i is not None:
             self.k_i = i
         if d is not None:
             self.k_d = d
+        if d_y is not None:
+            self.k_d_y = d_y
         if rebond_strength is not None:
             self.rebound_strength = rebond_strength
 
@@ -188,20 +222,36 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.previous_distance_x = 0
         self.previous_distance_y = 0
 
-    def calculate_mouse_movement_by_pid(self, target_position, mouse_position):
+    def calculate_mouse_movement_by_pid(self, target_position, mouse_position, target_velocity=None):
+        """
+        双轴 PID + 死区 + 连续增益调度 + 速度前馈。
+
+        target_velocity: (vx, vy) px/帧（来自 Target 卡尔曼滤波），None 视为 (0, 0)。
+        """
+        vx, vy = target_velocity if target_velocity is not None else (0.0, 0.0)
+
         if self.previous_time is not None and time.time() - self.previous_time > 0.5:
             self.clear_pid_history()
 
         current_time = time.time()
         distance_x = target_position[0] - mouse_position[0]
+        # 死区：小误差直接归零，消除末端微抖（积分/微分同样不吃死区内误差）
+        if abs(distance_x) < self.deadzone_x:
+            distance_x = 0
+        distance_y = target_position[1] - mouse_position[1]
+        if abs(distance_y) < self.deadzone_y:
+            distance_y = 0
+
         if distance_x * self.previous_distance_x < 0:
             self.x_integral_value = self.x_integral_value * self.rebound_strength
-        distance_y = target_position[1] - mouse_position[1]
         if distance_y * self.previous_distance_y < 0:
             self.y_integral_value = self.y_integral_value * self.rebound_strength
 
-        x_p = self.k_p * distance_x
-        y_p = self.k_p * distance_y
+        # 连续增益调度：目标越快 Kp 越大（无切换边界，不会抖振）
+        kp_x = self.k_p * (1.0 + self.velocity_gain_schedule * abs(vx))
+        kp_y = self.k_p * (1.0 + self.velocity_gain_schedule * abs(vy))
+        x_p = kp_x * distance_x
+        y_p = kp_y * distance_y
 
         if self.previous_time is not None:
             d_time = current_time - self.previous_time
@@ -211,10 +261,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
             y_i = self.k_i * self.y_integral_value
 
             if d_time != 0:
-                derivative_x = (distance_x - self.previous_distance_x) / d_time
-                x_d = self.k_d * derivative_x
-                derivative_y = (distance_y - self.previous_distance_y) / d_time
-                y_d = self.k_d * derivative_y
+                x_d = self.k_d * (distance_x - self.previous_distance_x) / d_time
+                # Y 轴微分独立（默认 0）：垂直框边缘抖动大，D 项易成噪声放大器
+                y_d = self.k_d_y * (distance_y - self.previous_distance_y) / d_time
             else:
                 x_d = 0
                 y_d = 0
@@ -224,8 +273,12 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
             x_d = 0
             y_d = 0
 
-        x_r = x_p + x_i + x_d
-        y_r = y_p + y_i + y_d
+        # 速度前馈：按目标速度直接补偿（相位超前），叠加在 PID 之后
+        x_ff = self.velocity_feedforward_x * vx
+        y_ff = self.velocity_feedforward_y * vy
+
+        x_r = x_p + x_i + x_d + x_ff
+        y_r = y_p + y_i + y_d + y_ff
 
         if abs(x_r) > self.max_movement:
             x_r = x_r / abs(x_r) * self.max_movement
