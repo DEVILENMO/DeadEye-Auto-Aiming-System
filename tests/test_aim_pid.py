@@ -11,6 +11,7 @@ def make_module(**overrides):
     params = dict(
         k_p=0.5, k_i=0.0, k_d=0.0, k_d_y=0.0,
         deadzone_x=0.0, deadzone_y=0.0,
+        shaping='linear', atan_slope=1.0, atan_ceiling=300.0,
         velocity_gain_schedule=0.0,
         velocity_feedforward_x=0.0, velocity_feedforward_y=0.0,
         rebound_strength=0.0, max_movement=100000,
@@ -102,3 +103,39 @@ def test_gain_schedule_is_continuous():
     mod2 = make_module(velocity_gain_schedule=0.05)
     x2, _ = mod2.calculate_mouse_movement_by_pid((110, 100), (100, 100), (10.5, 0.0))
     assert x2 == pytest.approx(x1 * (1 + 0.05 * 10.5) / (1 + 0.05 * 10.0), rel=1e-6)
+
+
+# ---------------------------------------------------------------- atan 软饱和整形
+
+def test_atan_shaping_zero_below_deadzone():
+    mod = make_module(shaping='atan', deadzone_x=0.5)
+    x_r, _ = mod.calculate_mouse_movement_by_pid((100.4, 100), (100, 100))
+    assert x_r == 0
+
+
+def test_atan_shaping_small_error_near_linear():
+    """小误差区间 atan(x)≈x：输出接近线性模式（斜率=1 时几乎一致）。"""
+    linear = make_module(shaping='linear', deadzone_x=0.0)
+    atan_mod = make_module(shaping='atan', deadzone_x=0.0, atan_slope=1.0, atan_ceiling=300.0)
+    x_lin, _ = linear.calculate_mouse_movement_by_pid((102.0, 100), (100, 100))
+    x_atan, _ = atan_mod.calculate_mouse_movement_by_pid((102.0, 100), (100, 100))
+    assert x_atan == pytest.approx(x_lin, rel=0.01)
+
+
+def test_atan_shaping_saturates_at_ceiling():
+    """大误差软饱和：输出封顶于 Kp·atan_ceiling，且平滑逼近（无 clamp 折角）。"""
+    mod = make_module(shaping='atan', deadzone_x=0.0, atan_ceiling=300.0)
+    x_huge, _ = mod.calculate_mouse_movement_by_pid((1e6, 100), (100, 100))
+    assert x_huge == pytest.approx(0.5 * 300.0, rel=0.001)
+    x_big, _ = mod.calculate_mouse_movement_by_pid((2000.0, 100), (100, 100))
+    assert x_big < x_huge  # 单调
+    assert x_big > 0.5 * 300.0 * 0.9  # 大误差已接近上限
+
+
+def test_atan_shaping_monotonic():
+    mod = make_module(shaping='atan', deadzone_x=0.5)
+    outputs = []
+    for e in (1.0, 3.0, 10.0, 50.0, 200.0, 1000.0):
+        x_r, _ = mod.calculate_mouse_movement_by_pid((100 + e, 100), (100, 100))
+        outputs.append(x_r)
+    assert outputs == sorted(outputs) and all(v > 0 for v in outputs)

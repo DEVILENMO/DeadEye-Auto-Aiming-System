@@ -61,7 +61,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 - **多版本 YOLO 检测**: `YoloDetector` 继承于 `DetectModule` 基类，一套代码支持 **YOLOv5 / v7 / v8 / v11 / v12 / 26**；输出头自动识别解码，训练权重（`.pt`）、ONNX（CUDA EP）与 TensorRT 引擎（`.engine` / `.plan` / `.trt`）三种部署格式自动分发。
 - **完整 CUDA 部署链**: ONNX Runtime CUDA EP（IOBinding 零分配）与原生 TensorRT 10/11 后端（cuda-python + 预分配显存 + 非默认流），配套引擎构建 / 基准测试工具与 CUDA DLL 自举；RTX 5090 实测 TensorRT + CUDA Graph 端到端 **789–1200 FPS**。
 - **目标追踪**: 结合匈牙利算法和卡尔曼滤波优化目标追踪的精确性和稳定性。
-- **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用「双轴 PID + 死区 + 速度前馈 + 增益调度」控制律：死区消除末端微抖，Y 轴微分独立可关（垂直抖动抑制），目标速度前馈（来自追踪层卡尔曼滤波）直接补偿运动滞后，Kp 随目标速度连续调度（无切换抖振）。
+- **执行模块**: `DeadEyeAutoAimingModule`、`VideoWriterOutput` 等继承 **`ExecutionModule`**，在追踪更新后对帧与目标列表执行瞄准、写带框视频等动作；辅助瞄准使用「双轴 PID + 误差整形 + 速度前馈 + 增益调度」控制律：死区消除末端微颤（可设亚像素），可选 atan 软饱和整形（小误差近似线性、大误差平滑封顶无折角），Y 轴微分独立可关（垂直抖动抑制），目标速度前馈（来自追踪层卡尔曼滤波）直接补偿运动滞后，Kp 随目标速度连续调度（无切换抖振）。
 - **易于扩展**: 可在 `input_module`、`detection_module`、`execution_module` 中按基类扩展；鼠标等行为由执行模块内 `MouseControlModule` 等实现，按需自行接入硬件或驱动。
 - **多语言UI**: 具有简单直观的用户界面,支持英文和简体中文两种语言,用户可以方便地切换语言或者增加新的语言支持。
 
@@ -72,7 +72,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 - **Multi-generation YOLO detection**: `YoloDetector` derives from `DetectModule` and supports **YOLOv5 / v7 / v8 / v11 / v12 / 26** in one code base; output heads are auto-decoded, and training weights (`.pt`), ONNX (CUDA EP) and TensorRT engines (`.engine` / `.plan` / `.trt`) are dispatched automatically.
 - **Full CUDA deployment chain**: ONNX Runtime CUDA EP (IOBinding, zero steady-state allocation) plus a native TensorRT 10/11 backend (cuda-python, pre-allocated device memory, non-default stream), with engine build / benchmark tooling and CUDA DLL bootstrap; measured **789–1200 FPS end-to-end** with TensorRT + CUDA Graph on an RTX 5090.
 - **Target Tracking**: Combines the Hungarian algorithm and Kalman filter to optimize the accuracy and stability of target tracking.
-- **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a dual-axis PID with deadband, velocity feed-forward (from the tracker's Kalman velocity estimate) and continuous gain scheduling; the Y-axis derivative is independently disablable for vertical jitter suppression.
+- **Execution modules**: Classes such as `DeadEyeAutoAimingModule` and `VideoWriterOutput` inherit **`ExecutionModule`** and run after tracking updates (aim assist, annotated video export, etc.); aim assist uses a dual-axis PID with error shaping (deadband; optional atan soft-saturation — near-linear for small errors, smoothly capped for large ones), velocity feed-forward from the tracker's Kalman estimate and continuous gain scheduling; the Y-axis derivative is independently disablable for vertical jitter suppression.
 - **Easy to Extend**: Extend `input_module`, `detection_module`, and `execution_module` via their base classes; mouse or other actuation is wired inside execution modules (e.g. `MouseControlModule` patterns) for your own hardware.
 - **Multi-language UI**: Features a simple and intuitive user interface that supports both English and Simplified Chinese. Users can easily switch between languages or add support for new languages.
 

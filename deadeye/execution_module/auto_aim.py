@@ -1,5 +1,6 @@
 # coding: utf-8
 # cython: language_level=3
+import math
 import time
 
 import pyautogui
@@ -32,7 +33,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
     PID 辅助瞄准执行模块。
 
     控制结构（取长补短后的完整形态）：
-    - 死区：误差小于 deadzone 的轴不输出，消除准星末端微抖；
+    - 误差整形：死区（默认 1.5px，可设 0.5px 做亚像素死区）消除锁定后的高频微颤；
+      可选 atan 软饱和整形 shaped(e) = B·atan(A·(2|e|−dz))——小误差近似线性（斜率 atan_slope），
+      大误差平滑封顶（上限 atan_ceiling，无 clamp 折角），"甩枪像人"的曲线来源；
     - 双轴 PID：X/Y 独立参数，Y 轴微分默认关闭（垂直框边缘抖动大，D 项易成噪声放大器）；
     - 增益调度：Kp 随目标速度连续放大（Kp_eff = Kp·(1 + schedule·|v|)），避免离散切换的抖振；
     - 速度前馈：out += vff · v_target，v_target 来自追踪层卡尔曼滤波的速度估计，
@@ -54,6 +57,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_float('k_d_y', 0.0, label='PID Kd(Y轴,默认关)', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('deadzone_x', 1.5, label='死区 X(px)', min_value=0.0, max_value=50.0, step=0.5)
         cls.register_float('deadzone_y', 1.5, label='死区 Y(px)', min_value=0.0, max_value=50.0, step=0.5)
+        cls.register_choice('shaping', 'linear', label='误差整形', choices=['linear', 'atan'])
+        cls.register_float('atan_slope', 1.0, label='atan 整形斜率', min_value=0.1, max_value=5.0, step=0.1)
+        cls.register_float('atan_ceiling', 300.0, label='atan 整形上限(px)', min_value=10.0, max_value=1000.0, step=10.0)
         cls.register_float('velocity_gain_schedule', 0.0, label='增益调度(每px/frame速度)', min_value=0.0, max_value=2.0, step=0.01)
         cls.register_float('velocity_feedforward_x', 0.0, label='速度前馈 X', min_value=0.0, max_value=2.0, step=0.01)
         cls.register_float('velocity_feedforward_y', 0.0, label='速度前馈 Y', min_value=0.0, max_value=2.0, step=0.01)
@@ -75,6 +81,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         k_d_y: float = 0.0,
         deadzone_x: float = 1.5,
         deadzone_y: float = 1.5,
+        shaping: str = 'linear',
+        atan_slope: float = 1.0,
+        atan_ceiling: float = 300.0,
         velocity_gain_schedule: float = 0.0,
         velocity_feedforward_x: float = 0.0,
         velocity_feedforward_y: float = 0.0,
@@ -100,6 +109,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.k_d_y = float(k_d_y)
         self.deadzone_x = float(deadzone_x)
         self.deadzone_y = float(deadzone_y)
+        self.shaping = str(shaping) if str(shaping) in ('linear', 'atan') else 'linear'
+        self.atan_slope = float(atan_slope)
+        self.atan_ceiling = float(atan_ceiling)
         self.velocity_gain_schedule = float(velocity_gain_schedule)
         self.velocity_feedforward_x = float(velocity_feedforward_x)
         self.velocity_feedforward_y = float(velocity_feedforward_y)
@@ -222,9 +234,28 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.previous_distance_x = 0
         self.previous_distance_y = 0
 
+    def _shape_error(self, error: float, deadzone: float) -> float:
+        """
+        误差整形：死区内归零；linear 模式原样通过；atan 模式软饱和。
+
+        atan 模式：shaped(e) = B·atan(A·(2|e| − dz))·sign(e)
+        - 小误差 ≈ atan_slope·(e − dz·sign(e))（近似线性，斜率可控）
+        - 大误差平滑封顶于 atan_ceiling（无 clamp 折角）
+        - 参数映射：B = 2C/π, A = slope·π/(4C)
+        """
+        magnitude = abs(error)
+        if magnitude <= deadzone:
+            return 0.0
+        effective = 2.0 * magnitude - deadzone
+        if self.shaping != 'atan':
+            return error
+        b = 2.0 * self.atan_ceiling / math.pi
+        a = self.atan_slope * math.pi / (4.0 * self.atan_ceiling)
+        return math.copysign(b * math.atan(a * effective), error)
+
     def calculate_mouse_movement_by_pid(self, target_position, mouse_position, target_velocity=None):
         """
-        双轴 PID + 死区 + 连续增益调度 + 速度前馈。
+        双轴 PID + 误差整形 + 连续增益调度 + 速度前馈。
 
         target_velocity: (vx, vy) px/帧（来自 Target 卡尔曼滤波），None 视为 (0, 0)。
         """
@@ -234,13 +265,8 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
             self.clear_pid_history()
 
         current_time = time.time()
-        distance_x = target_position[0] - mouse_position[0]
-        # 死区：小误差直接归零，消除末端微抖（积分/微分同样不吃死区内误差）
-        if abs(distance_x) < self.deadzone_x:
-            distance_x = 0
-        distance_y = target_position[1] - mouse_position[1]
-        if abs(distance_y) < self.deadzone_y:
-            distance_y = 0
+        distance_x = self._shape_error(target_position[0] - mouse_position[0], self.deadzone_x)
+        distance_y = self._shape_error(target_position[1] - mouse_position[1], self.deadzone_y)
 
         if distance_x * self.previous_distance_x < 0:
             self.x_integral_value = self.x_integral_value * self.rebound_strength
