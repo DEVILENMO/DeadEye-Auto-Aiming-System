@@ -32,31 +32,19 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 
 统一接口：继承 `BaseCamera` 实现 `get_image()`，返回 **RGB uint8 HWC** 图像。内置屏幕截屏相机（`SimpleScreenShotCamera`，视口取屏幕中心）与单视频文件源（`VideoFileCamera`，默认指向 `res/videos/` 示例视频）。
 
-### 截屏后端：原理与实测（`screenshot_helper.py`）
+### 截屏后端：原理与实测 / Capture backends: principles & measurements（`screenshot_helper.py`）
 
-三个后端按 `windows-capture → bettercam → mss` 自动降级（UI 可指定）：
+三个后端按 `windows-capture → bettercam → mss` 自动降级（UI 可指定）/ Automatic fallback chain `windows-capture → bettercam → mss` (or pin one in the UI):
 
-| 后端 | 原理 | 有效帧率* | 单次 grab | 特点 |
+| 后端 Backend | 原理 Principle | 有效帧率 Effective FPS* | 单次 grab Per grab | 特点 Notes |
 |---|---|---|---|---|
-| windows-capture | Windows.Graphics.Capture（Rust 绑定）：独立线程回调推送新帧，回调内原生裁剪中心视口 + 零拷贝转换，Python 侧仅保留最新帧 | **300 FPS** | 0.004 ms | 帧率受屏幕刷新率约束、内容驱动；静止画面返回 None 属正常 |
-| bettercam | DXGI Desktop Duplication（dxcam 维护分支）：`output_color='RGB'` 使颜色转换在驱动/C++ 侧完成，Python 每帧零转换 | **428 FPS** | 1.3 ms | 速度最快；要求显示缩放 100%，分辨率热变更自动重建 |
-| mss | GDI BitBlt：每次调用全量抓取 | **194 FPS** | 4.4 ms | 兼容性兜底（RDP/虚拟机）；CPU 占用最高 |
+| windows-capture | Windows.Graphics.Capture（Rust 绑定）：独立线程回调推送新帧，回调内原生裁剪中心视口 + 零拷贝转换，Python 侧仅保留最新帧<br>Windows.Graphics.Capture (Rust bindings): callback thread pushes new frames, native crop + conversion in the callback, newest frame kept on the Python side | **300 FPS** | 0.004 ms | 帧率受屏幕刷新率约束、内容驱动；静止画面返回 None 属正常<br>refresh-capped, content-driven; `None` on static screens is expected |
+| bettercam | DXGI Desktop Duplication（dxcam 维护分支）：`output_color='RGB'` 使颜色转换在驱动/C++ 侧完成，Python 每帧零转换<br>DXGI Desktop Duplication (maintained dxcam fork): conversion moved into the driver/C++ side | **428 FPS** | 1.3 ms | 速度最快；要求显示缩放 100%，分辨率热变更自动重建<br>fastest; needs 100% display scaling, rebuilds on resolution change |
+| mss | GDI BitBlt：每次调用全量抓取<br>GDI BitBlt, full grab per call | **194 FPS** | 4.4 ms | 兼容性兜底（RDP/虚拟机）；CPU 占用最高<br>compatibility fallback (RDP/VMs); highest CPU usage |
 
-\* 实测条件：2560×1440 @ 300Hz 主屏、640×640 中心视口、鼠标持续移动制造画面变化、3 秒计数。WGC 帧率严格等于刷新率上限；bettercam 可超过刷新率（部分场景含重复帧）；mss 为主动抓取率。
+\* 实测条件：2560×1440 @ 300Hz 主屏、640×640 中心视口、鼠标持续移动制造画面变化、3 秒计数。WGC 帧率严格等于刷新率上限；bettercam 可超过刷新率（部分场景含重复帧）；mss 为主动抓取率。/ Measured on a 2560×1440 @ 300Hz display, 640×640 center viewport, continuous cursor motion, 3 s window.
 
 Unified interface: subclass `BaseCamera` and implement `get_image()` returning **RGB uint8 HWC** images. Two inputs ship built-in: the screen-capture camera (`SimpleScreenShotCamera`, center viewport) and a single-file video source (`VideoFileCamera`, defaulting to the sample under `res/videos/`).
-
-### Capture backends: principles & measurements (`screenshot_helper.py`)
-
-Automatic fallback chain `windows-capture → bettercam → mss` (or pin one in the UI):
-
-| Backend | Principle | Effective FPS* | Per grab | Notes |
-|---|---|---|---|---|
-| windows-capture | Windows.Graphics.Capture (Rust bindings): callback thread pushes new frames, native center-viewport crop + conversion in the callback, newest frame kept on the Python side | **300 FPS** | 0.004 ms | refresh-capped, content-driven; `None` on static screens is expected |
-| bettercam | DXGI Desktop Duplication (maintained dxcam fork): `output_color='RGB'` moves conversion into the driver/C++ side | **428 FPS** | 1.3 ms | fastest; needs 100% display scaling, rebuilds on resolution change |
-| mss | GDI BitBlt, full grab per call | **194 FPS** | 4.4 ms | compatibility fallback (RDP/VMs); highest CPU usage |
-
-\* Measured on a 2560×1440 @ 300Hz primary display, 640×640 center viewport, continuous cursor motion, 3 s window. WGC equals the refresh cap; bettercam can exceed refresh (occasional duplicate frames); mss is a pull rate.
 
 ## 检测模块（DetectModule）— `deadeye/detection_module` / Detection Module
 
@@ -80,24 +68,16 @@ Automatic fallback chain `windows-capture → bettercam → mss` (or pin one in 
 
 Ultralytics export metadata (names/imgsz/end2end) disambiguates first; without metadata, a larger-dimension-is-anchors heuristic applies. Measured post-processing: 0.08–0.16 ms for v8/v11 heads (with NMS), 0.01–0.02 ms for the v26 end-to-end head (NMS-free).
 
-### 性能基准（RTX 5090，端到端含预处理与后处理，200 帧均值）/ Benchmarks
+### 性能基准 / Benchmarks（RTX 5090，端到端含预处理与后处理，200 帧均值 / end-to-end, mean of 200 frames）
 
-| 模型 | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
-|---|---|---|---|
-| YOLOv11s @ 256 | 168 FPS（5.47 ms） | 188 FPS（4.99 ms） | **1200 FPS（0.83 ms）** |
-| YOLOv11s @ 320 | 125 FPS（7.50 ms） | 243 FPS（4.12 ms） | **1198 FPS（0.83 ms）** |
-| YOLO26s @ 256  | 162 FPS（6.17 ms） | 227 FPS（4.40 ms） | **1005 FPS（1.00 ms）** |
-| YOLO26s @ 320  | 126 FPS（7.97 ms） | 177 FPS（5.65 ms） | **789 FPS（1.27 ms）** |
-
-| Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
+| 模型 Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
 |---|---|---|---|
 | YOLOv11s @ 256 | 168 FPS (5.47 ms) | 188 FPS (4.99 ms) | **1200 FPS (0.83 ms)** |
 | YOLOv11s @ 320 | 125 FPS (7.50 ms) | 243 FPS (4.12 ms) | **1198 FPS (0.83 ms)** |
-| YOLO26s @ 256  | 162 FPS (6.17 ms) | 227 FPS (4.40 ms) | **1005 FPS (1.00 ms)** |
-| YOLO26s @ 320  | 126 FPS (7.97 ms) | 177 FPS (5.65 ms) | **789 FPS (1.27 ms)** |
+| YOLO26s @ 256 | 162 FPS (6.17 ms) | 227 FPS (4.40 ms) | **1005 FPS (1.00 ms)** |
+| YOLO26s @ 320 | 126 FPS (7.97 ms) | 177 FPS (5.65 ms) | **789 FPS (1.27 ms)** |
 
-> 结论：batch=1 的小模型是 **kernel launch 开销受限**而非算力受限——CUDA Graph 单次 launch 是最大收益来源（推理 0.63–1.11 ms）；FP16 权重转换（体积减半）对吞吐影响 ±2%。
-> Takeaway: batch-1 small models are **launch-latency bound**, not compute bound — the single graph launch dominates (0.63–1.11 ms inference); FP16 conversion moves throughput by ±2%.
+> 结论：batch=1 的小模型是 **kernel launch 开销受限**而非算力受限——CUDA Graph 单次 launch 是最大收益来源（推理 0.63–1.11 ms）；FP16 权重转换（体积减半）对吞吐影响 ±2%。<br>Takeaway: batch-1 small models are **launch-latency bound**, not compute bound — the single graph launch dominates (0.63–1.11 ms inference); FP16 conversion moves throughput by ±2%.
 
 ## 目标追踪（TargetTracker）— `deadeye/core/target_tracker.py` / Target Tracking
 
