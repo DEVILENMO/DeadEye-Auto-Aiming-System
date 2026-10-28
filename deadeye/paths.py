@@ -30,3 +30,8 @@ def weights_path(*parts: str) -> str:
 def output_path(*parts: str) -> str:
     """output/ 生成物目录下的绝对路径。"""
     return repo_path('output', *parts)
+
+
+def config_path(*parts: str) -> str:
+    """config/ 用户配置目录下的绝对路径（不入库）。"""
+    return repo_path('config', *parts)

@@ -15,3 +15,12 @@ __pycache__/
 
 # apex 系列检测模型不公开（本地保留，不入库）
 weights/apex*
+
+# 鼠标控制模块（内核虚拟鼠标驱动，本地私用，不入库）
+#   deadeye/execution_module/mouse_control/         鼠标控制模块本体 + 驱动安装包（.sys/.inf/.cat）
+#   deadeye/execution_module/mouse_control_wiring.py 槽位装配（把框架的 SimpleMouseController 换成驱动实现）
+deadeye/execution_module/mouse_control/
+deadeye/execution_module/mouse_control_wiring.py
+
+# UI 设置持久化（用户本机）
+config/

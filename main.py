@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import threading
@@ -5,6 +6,8 @@ from enum import Enum
 import importlib
 import inspect
 import pkgutil
+
+from deadeye import paths
 
 from pynput import keyboard, mouse
 import tkinter as tk
@@ -17,6 +20,19 @@ from deadeye.execution_module import DeadEyeAutoAimingModule, VideoWriterOutput
 from deadeye.input_module import SimpleScreenShotCamera, VideoFileCamera
 from deadeye.base.modules import BaseCamera, DetectModule, ExecutionModule
 from deadeye.base.configurable import ConfigurableMixin
+
+# UI 设置持久化文件（语言 / 模块选择 / 各模块参数）
+UI_SETTINGS_FILE = paths.config_path('ui_settings.json')
+
+
+def _load_ui_settings() -> dict:
+    try:
+        with open(UI_SETTINGS_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
 
 # UI文字
 UI_TEXT = {
@@ -34,6 +50,13 @@ UI_TEXT = {
         'dialog_choose_path': 'Choose path',
         'auto_aim': 'Auto Aim',
         'auto_shoot': 'Auto Shoot',
+        'runtime_switch': 'Runtime switches',
+        'aim_state_idle': 'Not running — the checkboxes are the values applied at startup',
+        'aim_state_fmt': 'Auto Aim: {aim} · Auto Shoot: {shoot}',
+        'state_on': 'ON',
+        'state_off': 'OFF',
+        'state_muted': '#8b93a1',
+        'state_active': '#3fb950',
         'language': 'Language',
         'pause': 'Pause',
         'continue': 'Continue',
@@ -65,6 +88,13 @@ UI_TEXT = {
         'dialog_choose_path': '选择路径',
         'auto_aim': '辅助瞄准',
         'auto_shoot': '自动扳机',
+        'runtime_switch': '运行时开关',
+        'aim_state_idle': '未运行 — 勾选项为启动时生效的初始值',
+        'aim_state_fmt': '辅助瞄准：{aim} · 自动扳机：{shoot}',
+        'state_on': '开启',
+        'state_off': '关闭',
+        'state_muted': '#8b93a1',
+        'state_active': '#3fb950',
         'language': '语言',
         'pause': '暂停',
         'continue': '继续',
@@ -127,6 +157,11 @@ class DeadEyeUI(ctk.CTk):
         ctk.set_appearance_mode('dark')
         ctk.set_default_color_theme('blue')
 
+        self._settings = _load_ui_settings()
+        self._module_params: dict[str, dict] = self._settings.get('module_params', {})
+        if not isinstance(self._module_params, dict):
+            self._module_params = {}
+
         self.dead_eye_core: DeadEyeCore | None = None
         self.detect_module = None
         self.camera_module = None
@@ -136,7 +171,7 @@ class DeadEyeUI(ctk.CTk):
         self.geometry('520x1040')
         self.minsize(480, 1000)
 
-        self.lang = 'en'
+        self.lang = 'zh' if self._settings.get('language') == '简体中文' else 'en'
 
         self.status_var = tk.StringVar(value=UI_TEXT['en']['idle'])
         self.fps_text_var = tk.StringVar(value=UI_TEXT['en']['fps'])
@@ -166,7 +201,10 @@ class DeadEyeUI(ctk.CTk):
         self.auto_shoot_checkbutton = None
         self.auto_shoot_var = tk.BooleanVar(value=False)
         self.aim_runtime_frame = None
-        self.language_var = tk.StringVar(value='English')
+        self.aim_runtime_title = None
+        self.aim_state_var = tk.StringVar(value=UI_TEXT['en']['aim_state_idle'])
+        self.aim_state_label = None
+        self.language_var = tk.StringVar(value='简体中文' if self.lang == 'zh' else 'English')
         self.language_menu = None
         self.language_title_label = None
         self.run_button = None
@@ -195,15 +233,30 @@ class DeadEyeUI(ctk.CTk):
                 'DeadEyeAutoAimingModule': DeadEyeAutoAimingModule,
                 'VideoWriterOutput': VideoWriterOutput,
             }
-        if 'SimpleScreenShotCamera' in self.camera_class_map:
-            self.input_module_var.set('SimpleScreenShotCamera')
-        if 'YoloDetector' in self.detect_class_map:
-            self.detect_module_var.set('YoloDetector')
-        if 'DeadEyeAutoAimingModule' in self.execution_class_map:
-            self.exec_module_var.set('DeadEyeAutoAimingModule')
+        for var, map_, key in (
+            (self.input_module_var, self.camera_class_map, 'input_module'),
+            (self.detect_module_var, self.detect_class_map, 'detect_module'),
+            (self.exec_module_var, self.execution_class_map, 'exec_module'),
+        ):
+            saved = self._settings.get(key)
+            if saved in map_:
+                var.set(saved)
+                continue
+            if 'SimpleScreenShotCamera' in self.camera_class_map and var is self.input_module_var:
+                var.set('SimpleScreenShotCamera')
+            if 'YoloDetector' in self.detect_class_map and var is self.detect_module_var:
+                var.set('YoloDetector')
+            if 'DeadEyeAutoAimingModule' in self.execution_class_map and var is self.exec_module_var:
+                var.set('DeadEyeAutoAimingModule')
 
         self.create_widgets()
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # 设置持久化：语言 / 模块选择 / 各模块参数变更即保存，下次启动回放
+        for var in (self.language_var, self.input_module_var,
+                    self.detect_module_var, self.exec_module_var):
+            var.trace_add('write', lambda *_: self._save_ui_settings())
+        self._save_ui_settings()
 
         self.hot_keys = \
             {
@@ -216,6 +269,21 @@ class DeadEyeUI(ctk.CTk):
         print('Starting mouse listener thread...')
         self.start_mouse_listener()
 
+    def _save_ui_settings(self):
+        data = {
+            'language': self.language_var.get(),
+            'input_module': self.input_module_var.get(),
+            'detect_module': self.detect_module_var.get(),
+            'exec_module': self.exec_module_var.get(),
+            'module_params': self._module_params,
+        }
+        try:
+            os.makedirs(os.path.dirname(UI_SETTINGS_FILE), exist_ok=True)
+            with open(UI_SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError as e:
+            print(f'保存 UI 设置失败: {e}')
+
     def _t(self, key: str, **kwargs) -> str:
         template = UI_TEXT[self.lang][key]
         return template.format(**kwargs) if kwargs else template
@@ -224,8 +292,23 @@ class DeadEyeUI(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        main_frame = ctk.CTkFrame(self, corner_radius=10)
-        main_frame.grid(row=0, column=0, sticky='nsew', padx=12, pady=12)
+        # ---- 上半部分：可滚动的配置区 ----
+        # 参数项随模块不同而增减，条目多时窗口装不下，因此放在滚动容器里，
+        # 滚动条常驻右侧，底部操作区不受影响、始终可见。
+        scroll_frame = ctk.CTkScrollableFrame(
+            self,
+            corner_radius=10,
+            fg_color='transparent',
+            scrollbar_fg_color='transparent',
+            scrollbar_button_color='#5b6270',
+            scrollbar_button_hover_color='#8b93a1',
+        )
+        scroll_frame.grid(row=0, column=0, sticky='nsew', padx=12, pady=(12, 6))
+        scroll_frame.grid_columnconfigure(0, weight=1)
+        self.scroll_frame = scroll_frame
+
+        main_frame = ctk.CTkFrame(scroll_frame, corner_radius=10)
+        main_frame.grid(row=0, column=0, sticky='nsew')
         main_frame.grid_columnconfigure(0, weight=1)
 
         basic_frame = ctk.CTkFrame(main_frame, corner_radius=10)
@@ -303,8 +386,14 @@ class DeadEyeUI(ctk.CTk):
         self.tracking_config_frame.grid(row=8, column=0, columnspan=3, padx=10, pady=(6, 10), sticky='ew')
         self.tracking_config_frame.grid_columnconfigure(1, weight=1)
 
-        run_control_frame = ctk.CTkFrame(main_frame, corner_radius=10)
-        run_control_frame.grid(row=2, column=0, padx=10, pady=(0, 8), sticky='ew')
+        # ---- 下半部分：固定操作区（状态 / 运行按钮 / 运行时开关 / 退出）----
+        # 这一段不参与滚动：不管配置区多长，状态与开关始终可见。
+        action_frame = ctk.CTkFrame(self, corner_radius=10)
+        action_frame.grid(row=1, column=0, sticky='ew', padx=12, pady=(0, 12))
+        action_frame.grid_columnconfigure(0, weight=1)
+
+        run_control_frame = ctk.CTkFrame(action_frame, corner_radius=8)
+        run_control_frame.grid(row=0, column=0, padx=6, pady=(6, 4), sticky='ew')
         run_control_frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(run_control_frame, textvariable=self.status_var).grid(row=0, column=0, padx=(10, 6), pady=(10, 6), sticky='w')
@@ -321,13 +410,17 @@ class DeadEyeUI(ctk.CTk):
         )
         self.run_button.grid(row=1, column=0, columnspan=4, padx=10, pady=(0, 10), sticky='ew')
 
-        control_frame = ctk.CTkFrame(main_frame, corner_radius=10)
-        control_frame.grid(row=3, column=0, padx=10, pady=(0, 10), sticky='ew')
+        control_frame = ctk.CTkFrame(action_frame, corner_radius=8)
+        control_frame.grid(row=1, column=0, padx=6, pady=(4, 6), sticky='ew')
         control_frame.grid_columnconfigure(0, weight=1)
 
         self.aim_runtime_frame = ctk.CTkFrame(control_frame, corner_radius=8)
-        self.aim_runtime_frame.grid(row=0, column=0, padx=10, pady=(10, 6), sticky='ew')
+        self.aim_runtime_frame.grid(row=0, column=0, padx=6, pady=(6, 4), sticky='ew')
         self.aim_runtime_frame.grid_columnconfigure(0, weight=1)
+        self.aim_runtime_frame.grid_columnconfigure(1, weight=1)
+
+        self.aim_runtime_title = ctk.CTkLabel(self.aim_runtime_frame, text=self._t('runtime_switch'))
+        self.aim_runtime_title.grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 2), sticky='w')
 
         self.auto_aim_checkbutton = ctk.CTkCheckBox(
             self.aim_runtime_frame,
@@ -336,7 +429,7 @@ class DeadEyeUI(ctk.CTk):
             command=self.toggle_auto_aim,
             state='disabled',
         )
-        self.auto_aim_checkbutton.grid(row=0, column=0, padx=10, pady=(10, 4), sticky='w')
+        self.auto_aim_checkbutton.grid(row=1, column=0, padx=(10, 6), pady=4, sticky='w')
 
         self.auto_shoot_checkbutton = ctk.CTkCheckBox(
             self.aim_runtime_frame,
@@ -345,10 +438,19 @@ class DeadEyeUI(ctk.CTk):
             command=self.toggle_auto_shoot,
             state='disabled',
         )
-        self.auto_shoot_checkbutton.grid(row=1, column=0, padx=10, pady=(4, 10), sticky='w')
+        self.auto_shoot_checkbutton.grid(row=1, column=1, padx=(6, 10), pady=4, sticky='w')
+
+        # 实时状态：直接写明「辅助瞄准 / 自动扳机」当前是开还是关，
+        # 不用只靠勾选框颜色去猜。
+        self.aim_state_label = ctk.CTkLabel(
+            self.aim_runtime_frame,
+            textvariable=self.aim_state_var,
+            text_color=UI_TEXT['en']['state_muted'],
+        )
+        self.aim_state_label.grid(row=2, column=0, columnspan=2, padx=10, pady=(2, 8), sticky='w')
 
         self.exit_button = ctk.CTkButton(control_frame, text=UI_TEXT['en']['exit'], command=self.exit_program, fg_color='#8B3A3A', hover_color='#6B2E2E')
-        self.exit_button.grid(row=1, column=0, padx=10, pady=(6, 10), sticky='ew')
+        self.exit_button.grid(row=1, column=0, padx=6, pady=(4, 6), sticky='ew')
 
         self._on_detect_module_changed(self.detect_module_var.get())
         self._on_input_module_changed(self.input_module_var.get())
@@ -356,9 +458,12 @@ class DeadEyeUI(ctk.CTk):
         self._rebuild_tracking_panel()
         self._refresh_aim_runtime_visibility()
         self._refresh_run_control_state()
+        self._refresh_aim_state()
 
     def change_language(self, choice: str):
         self.lang = 'zh' if choice == '简体中文' else 'en'
+        if self.language_var.get() != choice:  # 编程式调用时同步菜单变量（会触发保存）
+            self.language_var.set(choice)
 
         self.title(UI_TEXT[self.lang]['title'])
         self.fps_text_var.set(UI_TEXT[self.lang]['fps'])
@@ -378,6 +483,8 @@ class DeadEyeUI(ctk.CTk):
             self.auto_aim_checkbutton.configure(text=UI_TEXT[self.lang]['auto_aim'])
         if self.auto_shoot_checkbutton is not None:
             self.auto_shoot_checkbutton.configure(text=UI_TEXT[self.lang]['auto_shoot'])
+        if self.aim_runtime_title is not None:
+            self.aim_runtime_title.configure(text=self._t('runtime_switch'))
         if self.language_title_label is not None:
             self.language_title_label.configure(text=UI_TEXT[self.lang]['language'])
         self._on_detect_module_changed(self.detect_module_var.get())
@@ -385,6 +492,7 @@ class DeadEyeUI(ctk.CTk):
         self._on_exec_module_changed()
         self._rebuild_tracking_panel()
         self._refresh_run_control_state()
+        self._refresh_aim_state()
 
     def _refresh_run_control_state(self):
         if self.dead_eye_core is None:
@@ -412,6 +520,7 @@ class DeadEyeUI(ctk.CTk):
             return
         mod.enable_auto_aim = not mod.enable_auto_aim
         self.auto_aim_var.set(mod.enable_auto_aim)
+        self._refresh_aim_state()
 
     def toggle_auto_shoot(self):
         mod = self._find_deadeye_auto_aiming_module()
@@ -419,6 +528,32 @@ class DeadEyeUI(ctk.CTk):
             return
         mod.enable_auto_shoot = not mod.enable_auto_shoot
         self.auto_shoot_var.set(mod.enable_auto_shoot)
+        self._refresh_aim_state()
+
+    def _refresh_aim_state(self):
+        """刷新「辅助瞄准 / 自动扳机」的实时状态提示。
+
+        未运行流水线时说明「勾选项 = 启动时生效的初始值」，
+        运行中则直接写明两者当前是开还是关。
+        """
+        if self.aim_state_label is None:
+            return
+        mod = self._find_deadeye_auto_aiming_module()
+        if mod is None:
+            self.aim_state_var.set(self._t('aim_state_idle'))
+            self.aim_state_label.configure(text_color=UI_TEXT[self.lang]['state_muted'])
+            return
+        aim_on = bool(mod.enable_auto_aim)
+        shoot_on = bool(mod.enable_auto_shoot)
+        self.aim_state_var.set(self._t(
+            'aim_state_fmt',
+            aim=self._t('state_on') if aim_on else self._t('state_off'),
+            shoot=self._t('state_on') if shoot_on else self._t('state_off'),
+        ))
+        self.aim_state_label.configure(
+            text_color=UI_TEXT[self.lang]['state_active'] if (aim_on or shoot_on)
+            else UI_TEXT[self.lang]['state_muted'],
+        )
 
     def toggle_pause(self):
         if self.dead_eye_core is None:
@@ -557,6 +692,14 @@ class DeadEyeUI(ctk.CTk):
 
         row = 1
         col = 0
+        stored_params = self._module_params.get(module_cls.__name__, {})
+
+        def _trace_param(var, class_name, key):
+            def _on_change(*_):
+                self._module_params.setdefault(class_name, {})[key] = var.get()
+                self._save_ui_settings()
+            return _on_change
+
         for field in fields:
             if field.field_type == 'bool':
                 var = tk.BooleanVar(value=bool(field.default))
@@ -564,6 +707,9 @@ class DeadEyeUI(ctk.CTk):
                 widget.grid(row=row, column=col, padx=10, pady=4, sticky='w')
                 widgets.append(widget)
                 vars_dict[field.key] = var
+                if field.key in stored_params:
+                    var.set(bool(stored_params[field.key]))
+                var.trace_add('write', _trace_param(var, module_cls.__name__, field.key))
                 col += 1
                 if col > 1:
                     col = 0
@@ -571,6 +717,9 @@ class DeadEyeUI(ctk.CTk):
                 continue
 
             var = tk.StringVar(value=str(field.default))
+            if field.key in stored_params:
+                var.set(str(stored_params[field.key]))
+            var.trace_add('write', _trace_param(var, module_cls.__name__, field.key))
             vars_dict[field.key] = var
 
             label = ctk.CTkLabel(parent_frame, text=field.label)
@@ -750,6 +899,7 @@ class DeadEyeUI(ctk.CTk):
                 self.auto_shoot_var.set(aim_mod.enable_auto_shoot)
 
             self._refresh_run_control_state()
+            self._refresh_aim_state()
         except Exception as e:
             self._set_status(self._t('status_start_failed', error=str(e)))
             return
