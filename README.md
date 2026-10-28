@@ -22,11 +22,11 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 
 - **线程模型**（`deadeye/core/dead_eye_core.py`）：相机、检测、追踪/执行三条线程以信号量逐帧交接，检测慢于输入时自动丢帧保最新。
 - **数据契约**：检测输出 `[class_name, (x1, y1), (x2, y2)]`（原图坐标）；追踪输出 `Target`（KF 平滑框 + 稳定 ID + 速度）；执行模块拿到「当前帧 + Target 列表」做任意下游动作。
-- **实测端到端**：TRT 引擎检测 + 追踪 + 写标注视频全流水线 **257 FPS**（640×640）；纯检测端到端 789–1200 FPS（见检测模块）。
+- **实测端到端**（TRT 引擎检测 + 追踪 + 执行层消费目标坐标，无磁盘 I/O）：**约 730 FPS**；执行层换为标注视频写出（mp4v 编码落盘）降至约 635 FPS——编码/磁盘 I/O 代价约 15%。纯检测线程 789–1200 FPS（见检测模块）。
 
 - **Thread model** (`deadeye/core/dead_eye_core.py`): camera, detection and tracking/execution threads hand off frames via semaphores; when detection is slower than input, older frames are dropped in favor of the newest.
 - **Data contract**: detections are `[class_name, (x1, y1), (x2, y2)]` in original-image coordinates; tracking yields `Target` objects (KF-smoothed box + stable ID + velocity); execution modules receive (frame, target list).
-- **Measured end-to-end**: 257 FPS for the full pipeline (TRT detection + tracking + annotated video writing) at 640×640; detection-only 789–1200 FPS (see the detection module).
+- **Measured end-to-end** (TRT detection + tracking + coordinate-consuming execution, no disk I/O): **≈730 FPS**; swapping the execution stage for annotated video writing (mp4v encode to disk) drops it to ≈635 FPS — a ~15% encoding/I/O cost. Detection thread alone: 789–1200 FPS (see the detection module).
 
 ## 输入模块（BaseCamera）— `deadeye/input_module` / Input Module
 
