@@ -195,6 +195,75 @@ def test_integral_output_clamped():
     assert mod.last_pid_debug['i'][0] == pytest.approx(30.0)
 
 
+# ---------------------------------------------------------------- 死区随框比例
+
+def test_proportional_deadband_scales_with_box(monkeypatch):
+    """大框的死区按比例放大：200px 框、比例 0.03 -> 有效死区 6px。"""
+    import deadeye.execution_module.auto_aim as aa
+    monkeypatch.setattr(aa.pyautogui, 'position', lambda: (0, 0))
+
+    from deadeye.base.modules import Target
+    mod = DeadEyeAutoAimingModule(
+        (640, 640), enable_auto_aim=True, enable_auto_shoot=False,
+        k_p=0.5, output_smoothing=0.0, max_movement=100000, max_step_per_frame=0,
+        auto_aim_range_x=10.0, auto_aim_range_y=10.0,
+    )
+    mod.view_range_start = (0, 0)  # mock 鼠标坐标即视口坐标
+    # 框 (100,100)-(300,300)，中心 (200,200)；鼠标在 (0,0) 视口坐标
+    target = Target('ball', 0, (100, 100), (300, 300))
+    mod.tracking_target_id = 0
+    x_r, _ = mod.auto_aim([target])
+    # 误差 200px，超出死区 6px，输出 = P(0.5*200) + I
+    assert abs(x_r) > 50
+    assert mod.last_pid_debug['e_shaped'][0] == pytest.approx(200.0)
+
+
+def test_proportional_deadband_silences_small_offset_on_big_box(monkeypatch):
+    """大球上偏移 5px（旧死区会响应）应在比例死区内静默。"""
+    import deadeye.execution_module.auto_aim as aa
+    monkeypatch.setattr(aa.pyautogui, 'position', lambda: (0, 0))
+
+    from deadeye.base.modules import Target
+    mod = DeadEyeAutoAimingModule(
+        (640, 640), enable_auto_aim=True, enable_auto_shoot=False,
+        k_p=0.5, output_smoothing=0.0, max_movement=100000,
+        deadzone_x=1.5, deadzone_y=1.5, deadzone_box_ratio=0.03,
+        auto_aim_range_x=10.0, auto_aim_range_y=10.0,
+    )
+    mod.view_range_start = (0, 0)  # mock 鼠标坐标即视口坐标
+    # 200px 框：有效死区 6px。把鼠标放在 (5,0)：误差 5px < 6 -> 零输出
+    monkeypatch.setattr(aa.pyautogui, 'position', lambda: (195, 0))
+    target = Target('ball', 0, (100, 100), (300, 300))
+    mod.tracking_target_id = 0
+    x_r, _ = mod.auto_aim([target])
+    assert x_r == 0
+
+
+def test_proportional_deadband_keeps_min_on_small_box(monkeypatch):
+    """小球回到死区下限：40px 框比例项 1.2 < 下限 1.5。"""
+    import deadeye.execution_module.auto_aim as aa
+    from deadeye.base.modules import Target
+    mod = DeadEyeAutoAimingModule(
+        (640, 640), enable_auto_aim=True, enable_auto_shoot=False,
+        k_p=0.5, output_smoothing=0.0, max_movement=100000,
+        deadzone_x=1.5, deadzone_y=1.5, deadzone_box_ratio=0.03,
+        auto_aim_range_x=10.0, auto_aim_range_y=10.0,
+    )
+    mod.view_range_start = (0, 0)  # mock 鼠标坐标即视口坐标
+    # 40px 框中心 (200,200)，鼠标 (0,0)：误差 200px >> 死区，看输出非零即可
+    monkeypatch.setattr(aa.pyautogui, 'position', lambda: (0, 0))
+    target = Target('ball', 0, (180, 180), (220, 220))
+    mod.tracking_target_id = 0
+    x_r, _ = mod.auto_aim([target])
+    assert x_r != 0
+    # 小框上 2px 误差仍应静默（比例项未超过下限）
+    monkeypatch.setattr(aa.pyautogui, 'position', lambda: (199, 0))
+    mod.clear_pid_history()
+    mod.tracking_target_id = 0
+    target2 = Target('ball', 0, (180, 180), (220, 220))
+    x_r2, _ = mod.auto_aim([target2])
+    assert x_r2 == 0
+
 # ---------------------------------------------------------------- 输出平滑
 
 def test_output_smoothing_damps_alternating_jitter():
