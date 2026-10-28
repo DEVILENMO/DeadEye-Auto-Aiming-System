@@ -173,11 +173,11 @@ No system-level CUDA setup needed on Windows: `cuda_env.py` auto-registers CUDA 
 
 ## 注意事项 / Precautions
 
-- **注1**：本项目从早期损坏的项目代码整合而来；各模块原理与实测指标见上文模块章节。
-- **注2**：本项目是一个使用屏幕图像基于目标检测网络进行辅助瞄准的程序，仅作为课程项目，供学习和研究测试使用。严禁将本项目用于游戏作弊、盈利等任何可能涉嫌违法的用途。本程序不提供对鼠标、键盘等输入设备的任何直接控制或互动的代码。其他使用者需要在严格遵守AGPL-3.0许可协议的前提下，合法合规地借鉴本仓库的源代码，不得进行任何违法行为。如有任何违法行为发生，与本项目作者无关，作者保留依法追究相关责任人法律责任的权利。
+- **注1**：早期版本由作者人工设计架构并编码实现，后因代码损坏丢失，现版本基于 AI 辅助重构后开源；各模块原理与实测指标见上文模块章节。
+- **注2**：本项目是一个通用的目标检测追踪框架，禁止用于违法用途。严禁将本项目用于游戏作弊、盈利等任何可能涉嫌违法的用途。本程序不提供对鼠标、键盘等输入设备的任何直接控制或互动的代码。其他使用者需要在严格遵守AGPL-3.0许可协议的前提下，合法合规地借鉴本仓库的源代码，不得进行任何违法行为。如有任何违法行为发生，与本项目作者无关，作者保留依法追究相关责任人法律责任的权利。
 
-- **Note 1**: this project was consolidated from earlier damaged code; per-module principles and measured metrics are documented in the module sections above.
-- **Note 2**: this is a course project for learning and research only. It is strictly prohibited to use it for game cheating, profit, or any potentially illegal purpose. No code for direct control of input devices (mouse/keyboard) is provided. Others must comply with the AGPL-3.0 license; any misuse is the sole responsibility of the user.
+- **Note 1**: the original architecture was designed and hand-coded by the author; after that source was damaged and lost, the current version was rebuilt with AI assistance and open-sourced. Per-module principles and measured metrics are documented in the module sections above.
+- **Note 2**: this project is a general-purpose object detection and tracking framework; any illegal use is strictly prohibited, including game cheating and profiteering. No code for direct control of input devices (mouse/keyboard) is provided. Others must comply with the AGPL-3.0 license; any misuse is the sole responsibility of the user.
 
 ## 使用须知 / Usage Notice
 
