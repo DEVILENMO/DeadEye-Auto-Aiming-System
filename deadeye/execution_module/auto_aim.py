@@ -65,7 +65,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_bool('debug_log', False, label='逐帧调试日志(输出/aim_debug.csv)')
         cls.register_float('deadzone_x', 1.5, label='死区 X(px,下限)', min_value=0.0, max_value=50.0, step=0.5)
         cls.register_float('deadzone_y', 1.5, label='死区 Y(px,下限)', min_value=0.0, max_value=50.0, step=0.5)
-        cls.register_float('deadzone_box_ratio', 0.03, label='死区随框比例', min_value=0.0, max_value=0.5, step=0.01)
+        cls.register_float('deadzone_box_ratio', 0.10, label='死区随框比例', min_value=0.0, max_value=0.5, step=0.01)
         cls.register_choice('shaping', 'linear', label='误差整形', choices=['linear', 'atan'])
         cls.register_float('atan_slope', 1.0, label='atan 整形斜率', min_value=0.1, max_value=5.0, step=0.1)
         cls.register_float('atan_ceiling', 300.0, label='atan 整形上限(px)', min_value=10.0, max_value=1000.0, step=10.0)
@@ -94,7 +94,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         debug_log: bool = False,
         deadzone_x: float = 1.5,
         deadzone_y: float = 1.5,
-        deadzone_box_ratio: float = 0.03,
+        deadzone_box_ratio: float = 0.10,
         shaping: str = 'linear',
         atan_slope: float = 1.0,
         atan_ceiling: float = 300.0,

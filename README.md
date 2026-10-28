@@ -117,7 +117,7 @@ out     = Kp_eff·e' + Ki·Σe' + Kd_axis·Δe' + vff·v_target
 |---|---|---|
 | Kp / Ki | 0.3 / 5.0 每秒 | Ki 按时间归一化，积分另设输出限幅（默认 30px），瞄准环频率从 60 到 300Hz 变化时手感保持一致<br>Ki normalized by time with a clamped integral output, so feel stays consistent from 60 to 300Hz loops |
 | Kd（X）/ Kd（Y） | 0 / 0 | 微分默认双轴关闭：高频检测抖动除以毫秒级 dt 会被放大成随机输出<br>both derivatives off by default; per-pixel detection noise divided by a millisecond dt becomes random output |
-| 死区 Deadband | 1.5 px 起 + 随框 3% | 有效死区 = max(下限, 比例×框边长)：质心噪声与目标成像尺寸成正比，大球自动获得更宽静默区，小球保持下限灵敏度；设 0.5px 即亚像素死区<br>effective deadband = max(floor, ratio×box): centroid noise scales with on-screen target size, so big balls get a wider silent zone while small ones keep floor sensitivity; 0.5px gives a sub-pixel deadband |
+| 死区 Deadband | 1.5 px 起 + 随框 10% | 有效死区 = max(下限, 比例×框边长)：质心噪声与目标成像尺寸成正比，大球自动获得更宽静默区，小球保持下限灵敏度；设 0.5px 即亚像素死区<br>effective deadband = max(floor, ratio×box): centroid noise scales with on-screen target size, so big balls get a wider silent zone while small ones keep floor sensitivity; 0.5px gives a sub-pixel deadband |
 | 误差整形 Shaping | linear（可选 atan） | atan 软饱和：斜率 `atan_slope`、上限 `atan_ceiling`，甩枪平滑封顶无折角<br>atan soft saturation with slope `atan_slope` and cap `atan_ceiling`; flicks saturate smoothly |
 | 输出限速 Slew cap | 15 px/帧 | 输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板<br>the output is px/frame (speed itself); the per-axis cap forms the flick-speed ceiling |
 | 输出平滑 Smoothing | 0.6 | 输出端 EMA：恒定跟踪全透传，只衰减 ±1px 级的符号交替噪声，消除锁定后的微颤（0 关闭）<br>output-side EMA: transparent for constant tracking, attenuates alternating +-1px noise that causes lock jitter (0 disables) |
