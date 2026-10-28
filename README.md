@@ -52,11 +52,11 @@ Unified interface: subclass `BaseCamera` and implement `get_image()` returning *
 
 ### 推理后端 / Inference backends
 
-| 后端 | 模型格式 | 原理 |
+| 后端 Backend | 模型格式 Format | 原理 Principle |
 |---|---|---|
-| UltralyticsBackend | `.pt` | torch 直接推理训练权重（v8/v11/v12/26），启动预热消除首帧卡顿 |
-| OnnxRuntimeBackend | `.onnx` | CUDA EP 自适应（无 GPU 回退 CPU）；IOBinding 输入绑定预处理复用缓冲、输出预分配固定 host 数组，稳态**零内存分配**（每次调用 = 1×H2D + 计算 + 1×D2H） |
-| TensorRTBackend | `.engine/.plan/.trt` | TRT 10/11 tensor-name API + cuda-python 直连驱动；pinned host / device 显存全预分配、非默认流；**CUDA Graph** 把「H2D→推理→D2H」整链捕获为单图，每帧一次 graph launch |
+| UltralyticsBackend | `.pt` | torch 直接推理训练权重（v8/v11/v12/26），启动预热消除首帧卡顿<br>runs training weights directly via torch, with a startup warm-up that removes first-frame stalls |
+| OnnxRuntimeBackend | `.onnx` | CUDA EP 自适应（无 GPU 回退 CPU）；IOBinding 输入绑定预处理复用缓冲、输出预分配固定 host 数组，稳态**零内存分配**（每次调用 = 1×H2D + 计算 + 1×D2H）<br>CUDA EP with CPU fallback; IOBinding binds the input to the reused letterbox buffer and pre-allocates outputs, giving zero steady-state allocation (each call = 1×H2D + compute + 1×D2H) |
+| TensorRTBackend | `.engine/.plan/.trt` | TRT 10/11 tensor-name API + cuda-python 直连驱动；pinned host / device 显存全预分配、非默认流；**CUDA Graph** 把「H2D→推理→D2H」整链捕获为单图，每帧一次 graph launch<br>TRT 10/11 tensor-name API driven via cuda-python; pinned host and device buffers fully pre-allocated on a non-default stream; **CUDA Graph** captures the whole H2D→inference→D2H chain into one graph, replayed with a single launch per frame |
 
 ### 输出头自动解码 / Output-head auto-decoding
 
@@ -105,14 +105,14 @@ out     = Kp_eff·e' + Ki·Σe' + Kd_axis·Δe' + vff·v_target
           → 积分回弹 anti-windup → max_movement 安全限幅 → 输出限速（px/帧）
 ```
 
-| 参数 | 默认 | 说明 |
+| 参数 Parameter | 默认 Default | 说明 Description |
 |---|---|---|
-| Kp / Ki | 0.3 / 0.3 | 积分主导（"贴上就吸"的实战手感来源） |
-| Kd（X）/ Kd（Y） | 0.01 / 0 | Y 轴微分默认关闭（垂直框边缘噪声会被 D 项放大） |
-| 死区 | 1.5 px | 消除锁定后的高频微颤；设 0.5px 即亚像素死区 |
-| 误差整形 | linear（可选 atan） | atan 软饱和：斜率 `atan_slope`、上限 `atan_ceiling`，甩枪平滑封顶无折角 |
-| 输出限速 | 15 px/帧 | 输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板 |
-| 速度前馈 / 增益调度 | 0 / 0 | KF 速度补偿运动相位滞后；Kp 随目标速度连续放大（无切换抖振） |
+| Kp / Ki | 0.3 / 0.3 | 积分主导（"贴上就吸"的实战手感来源）<br>integral-dominant tuning, the source of the snap-on feel |
+| Kd（X）/ Kd（Y） | 0.01 / 0 | Y 轴微分默认关闭（垂直框边缘噪声会被 D 项放大）<br>Y-axis derivative off by default; vertical box-edge noise gets amplified by the D term |
+| 死区 Deadband | 1.5 px | 消除锁定后的高频微颤；设 0.5px 即亚像素死区<br>kills the high-frequency tremor when locked; 0.5px gives a sub-pixel deadband |
+| 误差整形 Shaping | linear（可选 atan） | atan 软饱和：斜率 `atan_slope`、上限 `atan_ceiling`，甩枪平滑封顶无折角<br>atan soft saturation with slope `atan_slope` and cap `atan_ceiling`; flicks saturate smoothly |
+| 输出限速 Slew cap | 15 px/帧 | 输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板<br>the output is px/frame (speed itself); the per-axis cap forms the flick-speed ceiling |
+| 速度前馈 / 增益调度 Feed-forward / scheduling | 0 / 0 | KF 速度补偿运动相位滞后；Kp 随目标速度连续放大（无切换抖振）<br>Kalman velocity compensates motion phase lag; Kp scales continuously with target speed |
 
 Unified `update_targets(frame, target_list)` interface; ships the aim assist (`DeadEyeAutoAimingModule`) and the annotated-video writer (`VideoWriterOutput`, default `output/annotated.mp4`).
 
