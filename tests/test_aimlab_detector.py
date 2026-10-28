@@ -16,8 +16,8 @@ def test_hex_calibration_matches_aimlab_defaults():
     assert _rgb_hue((0, 255, 255)) == 90    # #00FFFF
     assert _rgb_hue((237, 199, 9)) == 25    # #EDC709
     det = AimLabColorDetector()
-    assert det.cyan_hue == 90
-    assert det.yellow_hue == 25
+    assert det.slots['default']['hue'] == 90
+    assert det.slots['hit']['hue'] == 25
 
 
 def test_invalid_hex_falls_back():
@@ -29,9 +29,9 @@ def test_custom_color_tracks_that_color():
     """用户改了 AimLab 目标色（如红色），hex 跟改后应检新颜色。"""
     img = np.full((200, 200, 3), 128, np.uint8)
     cv2.circle(img, (100, 100), 40, (255, 40, 40), -1)  # RGB 红
-    default_det = AimLabColorDetector(detect_yellow=False)
+    default_det = AimLabColorDetector(detect_hit=False, detect_miss=False)
     assert len(default_det.target_detect(img)) == 0
-    red_det = AimLabColorDetector(cyan_color='#FF2828', detect_yellow=False)
+    red_det = AimLabColorDetector(default_target_color='#FF2828', detect_hit=False, detect_miss=False)
     assert len(red_det.target_detect(img)) == 1
 
 
@@ -39,7 +39,7 @@ def test_hue_wrapping():
     """紫红/品红等跨 0 色相的颜色应正常检测（区间环绕）。"""
     img = np.full((200, 200, 3), 128, np.uint8)
     cv2.circle(img, (100, 100), 40, (255, 0, 200), -1)  # RGB 品红 H≈146
-    det = AimLabColorDetector(cyan_color='#FF00C8', detect_yellow=False)
+    det = AimLabColorDetector(default_target_color='#FF00C8', detect_hit=False, detect_miss=False)
     assert len(det.target_detect(img)) == 1
 
 
@@ -103,15 +103,15 @@ def test_gray_background_never_detected():
 def test_color_toggles():
     img = make_scene((160, 160, 40, CYAN), (160, 160, 0, YELLOW))
     img = make_scene((80, 160, 40, CYAN), (240, 160, 40, YELLOW))
-    cyan_only = AimLabColorDetector(detect_yellow=False)
-    assert len(cyan_only.target_detect(img)) == 1
-    yellow_only = AimLabColorDetector(detect_cyan=False)
-    assert len(yellow_only.target_detect(img)) == 1
+    default_only = AimLabColorDetector(detect_hit=False, detect_miss=False)
+    assert len(default_only.target_detect(img)) == 1
+    hit_only = AimLabColorDetector(detect_default=False, detect_miss=False)
+    assert len(hit_only.target_detect(img)) == 1
 
 
 def test_both_disabled_raises():
     with pytest.raises(ValueError):
-        AimLabColorDetector(detect_cyan=False, detect_yellow=False)
+        AimLabColorDetector(detect_default=False, detect_hit=False, detect_miss=False)
 
 
 def test_min_area_filters_small_blobs():

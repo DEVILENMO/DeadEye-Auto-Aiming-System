@@ -3,9 +3,10 @@
 """
 AimLab 专用颜色检测模块。
 
-AimLab 的目标球是高饱和度的青色 / 黄色球体（带辉光），场景为低饱和度灰白棋盘格，
-绿色横条与目标在色相上相距很远。因此用 HSV 双色相区间 + 饱和度/明度下限即可把
-球从背景里完整分离，连通域统计给出外接框与质心，全流程向量化，无逐像素 Python 循环。
+AimLab 的目标球是高饱和度球体（带辉光），场景为低饱和度灰白棋盘格，绿色横条
+与目标在色相上相距很远。检测器的三个颜色槽位与游戏内设置一一对应（默认/命中/
+未命中目标颜色，蓝/金/蓝），按 hex 标定色相中心 ± 容差生成掩码，饱和度/明度
+下限排除背景；连通域统计给出外接框与质心，全流程向量化，无逐像素 Python 循环。
 
 性能：640×640 RGB 输入单帧约 1 ms（cvtColor 0.2 + inRange×2 0.2 + 连通域 0.5），
 比神经网络推理低两个数量级，适合超高帧率闭环。
@@ -20,9 +21,11 @@ import numpy as np
 from deadeye.base.modules import DetectModule
 from deadeye.base.configurable import ConfigurableMixin
 
-# AimLab 默认目标色（游戏内可自定义，UI 中按 hex 修改）
-DEFAULT_CYAN_HEX = '#00FFFF'
-DEFAULT_YELLOW_HEX = '#EDC709'
+# AimLab 颜色槽位默认值（与游戏内「默认/命中/未命中目标颜色」三项一一对应，
+# 游戏内可自定义，UI 中按 hex 修改）
+DEFAULT_TARGET_HEX = '#00FFFF'  # 蓝
+HIT_TARGET_HEX = '#EDC709'      # 金
+MISS_TARGET_HEX = '#00FFFF'     # 蓝
 
 _DEFAULT_SAT_MIN = 80   # 灰白棋盘格饱和度极低，一道下限即可排除
 _DEFAULT_VAL_MIN = 120  # 排除暗角与阴影
@@ -49,11 +52,13 @@ def _rgb_hue(rgb: tuple[int, int, int]) -> int:
 class AimLabColorDetector(DetectModule, ConfigurableMixin):
     @classmethod
     def declare_config(cls) -> None:
-        cls.register_str('cyan_color', DEFAULT_CYAN_HEX, label='青球颜色(hex)')
-        cls.register_str('yellow_color', DEFAULT_YELLOW_HEX, label='黄球颜色(hex)')
+        cls.register_str('default_target_color', DEFAULT_TARGET_HEX, label='默认目标颜色')
+        cls.register_str('hit_target_color', HIT_TARGET_HEX, label='命中目标颜色')
+        cls.register_str('miss_target_color', MISS_TARGET_HEX, label='未命中目标颜色')
         cls.register_int('hue_tolerance', 10, label='色相容差', min_value=1, max_value=45, step=1)
-        cls.register_bool('detect_cyan', True, label='识别青色球')
-        cls.register_bool('detect_yellow', True, label='识别黄色球')
+        cls.register_bool('detect_default', True, label='识别默认目标')
+        cls.register_bool('detect_hit', True, label='识别命中目标')
+        cls.register_bool('detect_miss', True, label='识别未命中目标')
         cls.register_int('min_area_px', 64, label='最小面积(px)', min_value=1, max_value=100000, step=16)
         cls.register_int('sat_min', _DEFAULT_SAT_MIN, label='饱和度下限', min_value=0, max_value=255, step=5)
         cls.register_int('val_min', _DEFAULT_VAL_MIN, label='明度下限', min_value=0, max_value=255, step=5)
@@ -63,11 +68,13 @@ class AimLabColorDetector(DetectModule, ConfigurableMixin):
     def __init__(
         self,
         *,
-        cyan_color: str = DEFAULT_CYAN_HEX,
-        yellow_color: str = DEFAULT_YELLOW_HEX,
+        default_target_color: str = DEFAULT_TARGET_HEX,
+        hit_target_color: str = HIT_TARGET_HEX,
+        miss_target_color: str = MISS_TARGET_HEX,
         hue_tolerance: int = 10,
-        detect_cyan: bool = True,
-        detect_yellow: bool = True,
+        detect_default: bool = True,
+        detect_hit: bool = True,
+        detect_miss: bool = True,
         min_area_px: int = 64,
         sat_min: int = _DEFAULT_SAT_MIN,
         val_min: int = _DEFAULT_VAL_MIN,
@@ -75,24 +82,31 @@ class AimLabColorDetector(DetectModule, ConfigurableMixin):
         min_fill_ratio: float = 0.55,
         **kwargs,
     ):
-        if not detect_cyan and not detect_yellow:
-            raise ValueError('detect_cyan 与 detect_yellow 至少开启一个')
-        self.detect_cyan = bool(detect_cyan)
-        self.detect_yellow = bool(detect_yellow)
+        if not (detect_default or detect_hit or detect_miss):
+            raise ValueError('三个颜色槽位的识别开关至少开启一个')
+        self.detect_default = bool(detect_default)
+        self.detect_hit = bool(detect_hit)
+        self.detect_miss = bool(detect_miss)
         self.hue_tolerance = int(hue_tolerance)
         # 目标色 hex -> 色相中心；区间 = 中心 ± 容差（环绕处理见 _build_mask）
-        self.cyan_rgb = _parse_hex_color(cyan_color, DEFAULT_CYAN_HEX)
-        self.yellow_rgb = _parse_hex_color(yellow_color, DEFAULT_YELLOW_HEX)
-        self.cyan_hue = _rgb_hue(self.cyan_rgb)
-        self.yellow_hue = _rgb_hue(self.yellow_rgb)
+        self.slots = {
+            'default': {'rgb': _parse_hex_color(default_target_color, DEFAULT_TARGET_HEX),
+                        'enabled': self.detect_default},
+            'hit': {'rgb': _parse_hex_color(hit_target_color, HIT_TARGET_HEX),
+                    'enabled': self.detect_hit},
+            'miss': {'rgb': _parse_hex_color(miss_target_color, MISS_TARGET_HEX),
+                     'enabled': self.detect_miss},
+        }
+        for slot in self.slots.values():
+            slot['hue'] = _rgb_hue(slot['rgb'])
         self.min_area_px = int(min_area_px)
         self.sat_min = int(sat_min)
         self.val_min = int(val_min)
         self.max_aspect_ratio = float(max_aspect_ratio)
         self.min_fill_ratio = float(min_fill_ratio)
         self.last_detect_ms = 0.0
-        print(f'AimLabColorDetector: cyan #{cyan_color} -> H{self.cyan_hue}, '
-              f'yellow #{yellow_color} -> H{self.yellow_hue}, tol ±{self.hue_tolerance}')
+        hues = ', '.join(f'{name} H{s["hue"]}' for name, s in self.slots.items() if s['enabled'])
+        print(f'AimLabColorDetector: {hues}, tol ±{self.hue_tolerance}')
 
     def _build_mask(self, hsv: np.ndarray, hue_center: int) -> np.ndarray:
         """色相中心 ± 容差的掩码，处理色相环 [0,180) 的环绕。"""
@@ -115,13 +129,10 @@ class AimLabColorDetector(DetectModule, ConfigurableMixin):
         hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
         mask = None
-        for hue_center, enabled in (
-            (self.cyan_hue, self.detect_cyan),
-            (self.yellow_hue, self.detect_yellow),
-        ):
-            if not enabled:
+        for slot in self.slots.values():
+            if not slot['enabled']:
                 continue
-            part = self._build_mask(hsv, hue_center)
+            part = self._build_mask(hsv, slot['hue'])
             mask = part if mask is None else cv2.bitwise_or(mask, part)
 
         results: list = []
