@@ -4,11 +4,11 @@
 
 DeadEye 是一个**通用的视觉目标定位与追踪系统框架**：模块化流水线「输入 → 检测 → 追踪 → 执行」，检测层以可插拔后端覆盖 YOLOv5/v7/v8/v11/v12/26 的完整 CUDA 部署链（ONNX Runtime CUDA EP / TensorRT + CUDA Graph，RTX 5090 实测端到端 789–1200 FPS），追踪层提供 IoU 匈牙利匹配、卡尔曼滤波与可配置的目标生命周期，执行层把定位结果对接到任意下游动作。
 
-作为示例，仓库提供了 FPS 游戏屏幕目标追踪与辅助瞄准的效果演示（通过分析屏幕截图检测并追踪目标，再由模拟操作实现辅助瞄准与自动扳机）。同样的框架我已应用在光学激光控制与监控探头目标追踪中——这些领域的示例程序未随仓库提供，但只需替换或扩展对应模块，即可把 DeadEye 组装到任何"看得见、框得住、要跟随"的任务上。
+作为示例，仓库提供了 FPS 游戏屏幕目标追踪与辅助瞄准的效果演示（通过分析屏幕截图检测并追踪目标，再由模拟操作实现辅助瞄准与自动扳机）。同样的框架我已应用在光学激光控制和监控探头追踪上。这两个领域的示例程序未随仓库提供，替换或扩展对应模块之后，DeadEye 可以承担任何需要看住目标、持续跟随的任务。
 
 DeadEye is a **universal visual target localization & tracking framework**: a modular pipeline (*input → detection → tracking → execution*) where the detection layer ships pluggable backends covering the full CUDA deployment chain of YOLOv5/v7/v8/v11/v12/26 (ONNX Runtime CUDA EP / TensorRT + CUDA Graph, measured 789–1200 FPS end-to-end on an RTX 5090), the tracking layer provides IoU-cost Hungarian matching, Kalman filtering and a configurable target lifecycle, and the execution layer connects localization results to arbitrary downstream actions.
 
-As a showcase, the repository includes an FPS screen-tracking & aim-assist demo (detect and track targets from screen captures, then drive simulated aiming/trigger actions). I have also deployed the same framework to optical laser control and surveillance-camera target tracking — those samples are not included, but by swapping or extending the corresponding modules, DeadEye can be assembled onto any task that needs to "see, localize and follow".
+As a showcase, the repository includes an FPS screen-tracking & aim-assist demo (detect and track targets from screen captures, then drive simulated aiming/trigger actions). I have also deployed the same framework to optical laser control and surveillance-camera tracking. Those samples are not included here; after swapping or extending the corresponding modules, DeadEye fits any task that must watch a scene and keep following its targets.
 
 ## 整体架构 / Architecture
 
@@ -22,13 +22,13 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 
 - **线程模型**（`deadeye/core/dead_eye_core.py`）：相机、检测、追踪/执行三条线程以信号量逐帧交接，检测慢于输入时自动丢帧保最新。
 - **数据契约**：检测输出 `[class_name, (x1, y1), (x2, y2)]`（原图坐标）；追踪输出 `Target`（KF 平滑框 + 稳定 ID + 速度）；执行模块拿到「当前帧 + Target 列表」做任意下游动作。
-- **实测端到端**（TRT 引擎检测 + 追踪 + 执行层消费目标坐标，无磁盘 I/O）：**约 730 FPS**；执行层换为标注视频写出（mp4v 编码落盘）降至约 635 FPS——编码/磁盘 I/O 代价约 15%。纯检测线程 789–1200 FPS（见检测模块）。
+- **实测端到端**（TRT 引擎检测 + 追踪 + 执行层消费目标坐标，无磁盘 I/O）：**约 730 FPS**；执行层换为标注视频写出（mp4v 编码落盘）后降至约 635 FPS，编码与磁盘写入的开销约占 15%。纯检测线程 789–1200 FPS（见检测模块）。
 
 - **Thread model** (`deadeye/core/dead_eye_core.py`): camera, detection and tracking/execution threads hand off frames via semaphores; when detection is slower than input, older frames are dropped in favor of the newest.
 - **Data contract**: detections are `[class_name, (x1, y1), (x2, y2)]` in original-image coordinates; tracking yields `Target` objects (KF-smoothed box + stable ID + velocity); execution modules receive (frame, target list).
-- **Measured end-to-end** (TRT detection + tracking + coordinate-consuming execution, no disk I/O): **≈730 FPS**; swapping the execution stage for annotated video writing (mp4v encode to disk) drops it to ≈635 FPS — a ~15% encoding/I/O cost. Detection thread alone: 789–1200 FPS (see the detection module).
+- **Measured end-to-end** (TRT detection + tracking + coordinate-consuming execution, no disk I/O): **≈730 FPS**; swapping the execution stage for annotated video writing (mp4v encode to disk) drops it to ≈635 FPS, a ~15% cost from encoding and disk writes. Detection thread alone: 789–1200 FPS (see the detection module).
 
-## 输入模块（BaseCamera）— `deadeye/input_module` / Input Module
+## 输入模块（BaseCamera）· `deadeye/input_module` / Input Module
 
 统一接口：继承 `BaseCamera` 实现 `get_image()`，返回 **RGB uint8 HWC** 图像。内置屏幕截屏相机（`SimpleScreenShotCamera`，视口取屏幕中心）与单视频文件源（`VideoFileCamera`，默认指向 `res/videos/` 示例视频）。
 
@@ -46,7 +46,7 @@ As a showcase, the repository includes an FPS screen-tracking & aim-assist demo 
 
 Unified interface: subclass `BaseCamera` and implement `get_image()` returning **RGB uint8 HWC** images. Two inputs ship built-in: the screen-capture camera (`SimpleScreenShotCamera`, center viewport) and a single-file video source (`VideoFileCamera`, defaulting to the sample under `res/videos/`).
 
-## 检测模块（DetectModule）— `deadeye/detection_module` / Detection Module
+## 检测模块（DetectModule）· `deadeye/detection_module` / Detection Module
 
 `YoloDetector` 按模型后缀自动分发到三个推理后端；预处理（letterbox，预分配缓冲稳态零分配）与后处理（输出头自动解码 + 向量化 NMS）对所有后端共享。
 
@@ -77,21 +77,21 @@ Ultralytics export metadata (names/imgsz/end2end) disambiguates first; without m
 | YOLO26s @ 256 | 162 FPS (6.17 ms) | 227 FPS (4.40 ms) | **1005 FPS (1.00 ms)** |
 | YOLO26s @ 320 | 126 FPS (7.97 ms) | 177 FPS (5.65 ms) | **789 FPS (1.27 ms)** |
 
-> 结论：batch=1 的小模型是 **kernel launch 开销受限**而非算力受限——CUDA Graph 单次 launch 是最大收益来源（推理 0.63–1.11 ms）；FP16 权重转换（体积减半）对吞吐影响 ±2%。<br>Takeaway: batch-1 small models are **launch-latency bound**, not compute bound — the single graph launch dominates (0.63–1.11 ms inference); FP16 conversion moves throughput by ±2%.
+> 结论：batch=1 的小模型，瓶颈落在 kernel launch 开销上；CUDA Graph 把每帧合并为一次 launch，是收益最大的一项（推理 0.63–1.11 ms）。FP16 权重转换把体积减半，吞吐变化在 ±2% 以内。<br>Takeaway: batch-1 small models bottleneck on kernel-launch overhead; merging each frame into a single graph launch is the biggest win (0.63–1.11 ms inference). FP16 conversion halves the file size and moves throughput by ±2%.
 
-## 目标追踪（TargetTracker）— `deadeye/core/target_tracker.py` / Target Tracking
+## 目标追踪（TargetTracker）· `deadeye/core/target_tracker.py` / Target Tracking
 
-- **帧间匹配**：匈牙利算法（`scipy.linear_sum_assignment`）求解**向量化 IoU 代价矩阵**（尺度无关，角点曼哈顿距离的替代），叠加**类别门控 + IoU 门控**（跨类别/重叠不足不参与关联）；匹配用 **KF 预测框**而非上一帧观测，运动目标关联更稳。
-- **卡尔曼滤波**：每目标一个 8 维等速 KF（中心 + 尺寸 + 速度，numpy 实现，`BoxKalmanFilter`）——平滑观测噪声、漏检帧推进位置、并向执行层输出**目标速度**（前馈用）。
-- **目标生命周期**（UI「追踪参数」面板可调）：`漏检保留帧数`（默认 5，期间 ID 不变）、`确认命中帧数`（默认 1，抑制单帧误检）、`匹配 IoU 门控`（默认 0.3）——消除单帧漏检导致的 ID 跳变。
+- **帧间匹配**：匈牙利算法（`scipy.linear_sum_assignment`）求解**向量化 IoU 代价矩阵**（尺度无关，角点曼哈顿距离的替代），叠加**类别门控 + IoU 门控**（跨类别/重叠不足不参与关联）；匹配基于 **KF 预测框**进行，运动目标的关联因此更稳。
+- **卡尔曼滤波**：每目标一个 8 维等速 KF（中心 + 尺寸 + 速度，numpy 实现，`BoxKalmanFilter`）。它平滑观测噪声，在漏检期间推进目标位置，**速度状态**则直接交给执行层做前馈。
+- **目标生命周期**（UI「追踪参数」面板可调）：`漏检保留帧数`（默认 5，期间 ID 不变）、`确认命中帧数`（默认 1，抑制单帧误检）、`匹配 IoU 门控`（默认 0.3）。三者共同消除了单帧漏检造成的 ID 跳变。
 - **开销**：关联为微秒级（IoU 矩阵向量化 + 线性分配），远低于单帧检测耗时。
 
-- **Association**: Hungarian assignment (`scipy.linear_sum_assignment`) over a **vectorized IoU cost matrix** (scale-invariant, replacing corner Manhattan distance) with **class + IoU gating**; association runs on **KF-predicted boxes** rather than last observations — steadier for moving targets.
-- **Kalman filter**: one 8-state constant-velocity KF per target (`BoxKalmanFilter`, numpy) — smooths noisy boxes, advances targets through misses, and exposes **target velocity** to the execution layer.
-- **Lifecycle** (tunable in the UI Tracking panel): missed-frame retention (default 5, stable IDs), min-hits confirmation (default 1), match IoU gate (default 0.3) — eliminates single-miss ID churn.
+- **Association**: Hungarian assignment (`scipy.linear_sum_assignment`) over a **vectorized IoU cost matrix** (scale-invariant, replacing corner Manhattan distance) with **class + IoU gating**; association runs on **KF-predicted boxes**, which keeps moving targets matched steadily.
+- **Kalman filter**: one 8-state constant-velocity KF per target (`BoxKalmanFilter`, numpy): it smooths noisy boxes, advances targets through misses, and exposes **target velocity** to the execution layer.
+- **Lifecycle** (tunable in the UI Tracking panel): missed-frame retention (default 5, stable IDs), min-hits confirmation (default 1), match IoU gate (default 0.3). Together they eliminate single-miss ID churn.
 - **Cost**: microsecond-scale association, negligible against per-frame detection.
 
-## 执行模块（ExecutionModule）— `deadeye/execution_module` / Execution Module
+## 执行模块（ExecutionModule）· `deadeye/execution_module` / Execution Module
 
 统一接口 `update_targets(frame, target_list)`；内置辅助瞄准（`DeadEyeAutoAimingModule`）与标注视频写出（`VideoWriterOutput`：画框 + ID，默认输出 `output/annotated.mp4`）。
 
@@ -99,7 +99,7 @@ Ultralytics export metadata (names/imgsz/end2end) disambiguates first; without m
 
 ```
 e'      = shape(e)                          # 死区（默认 1.5px，可设 0.5px 亚像素）
-                                              atan 模式: B·atan(A·(2|e|−dz)) —— 小误差线性、大误差平滑封顶
+                                              atan 模式: B·atan(A·(2|e|−dz))：小误差近似线性，大误差平滑封顶
 Kp_eff  = Kp · (1 + schedule · |v_target|)   # 连续增益调度（v 来自追踪层 KF）
 out     = Kp_eff·e' + Ki·Σe' + Kd_axis·Δe' + vff·v_target
           → 积分回弹 anti-windup → max_movement 安全限幅 → 输出限速（px/帧）
@@ -130,10 +130,10 @@ python tools/benchmark.py weights/ --engine --cpu                        # 后�
 python -m pytest tests/ -q                                               # 单元测试（53 项）
 ```
 
-- **引擎缓存**：sidecar JSON 记录类别名 / imgsz / end2end / 精度 / TRT 版本与 ONNX mtime——加载引擎即得全部解码参数，过期自动判定重建；TRT 11 精度跟随模型，FP16 引擎自动优先 `.fp16.onnx` 构建。
+- **引擎缓存**：sidecar JSON 记录类别名 / imgsz / end2end / 精度 / TRT 版本与 ONNX mtime，加载引擎即得全部解码参数，过期自动重建；TRT 11 精度跟随模型，FP16 引擎自动优先 `.fp16.onnx` 构建。
 - **引擎不入库**（`.engine` 已 ignore）：引擎绑定 GPU 架构与 TRT 版本，克隆后用 `build_engines.py` 本机重建；自备模型放 `weights/`（默认路径锚定仓库根，`deadeye/paths.py`）。
 
-No system-level CUDA setup needed on Windows: `cuda_env.py` auto-registers CUDA DLLs from torch/lib and pip-installed NVIDIA packages at startup. Engines are cached with a metadata sidecar (staleness-aware rebuilds); FP16 engines build from the `.fp16.onnx` source automatically. Engines are not committed (GPU- and TRT-version-specific) — rebuild locally and place your own models under `weights/` (default paths anchored to the repo root via `deadeye/paths.py`).
+No system-level CUDA setup needed on Windows: `cuda_env.py` auto-registers CUDA DLLs from torch/lib and pip-installed NVIDIA packages at startup. Engines are cached with a metadata sidecar (staleness-aware rebuilds); FP16 engines build from the `.fp16.onnx` source automatically. Engines are tied to your GPU and TRT version, so rebuild locally and place your own models under `weights/` (default paths anchored to the repo root via `deadeye/paths.py`).
 
 ## 使用指南 / Usage Guide
 
