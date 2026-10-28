@@ -68,6 +68,14 @@ Unified interface: subclass `BaseCamera` and implement `get_image()` returning *
 
 Ultralytics export metadata (names/imgsz/end2end) disambiguates first; without metadata, a larger-dimension-is-anchors heuristic applies. Measured post-processing: 0.08–0.16 ms for v8/v11 heads (with NMS), 0.01–0.02 ms for the v26 end-to-end head (NMS-free).
 
+### 专用检测器：AimLab 颜色检测 / Dedicated detector: AimLab color detection（`aimlab_color_detector.py`）
+
+针对 AimLab 目标球（高饱和青 / 黄色圆球）的专用检测器，作为 YoloDetector 之外的第二选择出现在 UI 检测模块列表中。原理：RGB 转 HSV 后按青（H 85–100）与黄（H 20–40）两个色相区间做 `inRange`，饱和度 / 明度下限排除灰白棋盘格背景，绿色横条（H≈60）因色相相距较远被天然排除；`connectedComponentsWithStats` 给出外接框，再按圆形度过滤（长宽比 ≤1.6、填充率 ≥0.55）剔除辉光光晕与地面反光条。
+
+实测：640×640 单帧约 1.8 ms（约为神经网络后端的千分之一量级），真实截图上精确检出单一球体。可配置项：青 / 黄开关、最小面积、饱和度 / 明度下限、圆形度阈值。
+
+A dedicated detector for AimLab's saturated cyan / yellow target balls, listed alongside YoloDetector in the UI. Principle: RGB→HSV, two hue-band `inRange` masks (cyan H 85–100, yellow H 20–40), saturation/value floors exclude the gray checkered background and the green bar (H≈60) falls far outside both bands; `connectedComponentsWithStats` yields boxes, then a circularity filter (aspect ≤1.6, fill ≥0.55) rejects glow halos and floor reflections. Measured ≈1.8 ms per 640×640 frame; single-ball screenshots detected exactly.
+
 ### 性能基准 / Benchmarks（RTX 5090，端到端含预处理与后处理，200 帧均值 / end-to-end, mean of 200 frames）
 
 | 模型 Model | ONNX Runtime CPU | ONNX Runtime CUDA | TensorRT + CUDA Graph |
