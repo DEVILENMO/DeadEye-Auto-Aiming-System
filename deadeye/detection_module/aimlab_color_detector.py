@@ -79,7 +79,7 @@ class AimLabColorDetector(DetectModule, ConfigurableMixin):
 
         results: list = []
         if mask is not None:
-            count, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+            count, _, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
             for i in range(1, count):  # 0 是背景
                 area = stats[i, cv2.CC_STAT_AREA]
                 if area < self.min_area_px:
@@ -91,8 +91,11 @@ class AimLabColorDetector(DetectModule, ConfigurableMixin):
                 fill = area / max(1, w * h)
                 if aspect > self.max_aspect_ratio or fill < self.min_fill_ratio:
                     continue
-                x, y = stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP]
-                results.append(['ball', (int(x), int(y)), (int(x + w), int(y + h))])
+                # 以质心为框中心（亚像素、对辉光变化稳定），尺寸仍取连通域外接框
+                cx, cy = centroids[i]
+                x1 = int(round(cx - w * 0.5))
+                y1 = int(round(cy - h * 0.5))
+                results.append(['ball', (x1, y1), (x1 + int(w), y1 + int(h))])
 
         self.last_detect_ms = (cv2.getTickCount() - t0) / cv2.getTickFrequency() * 1000
         return results

@@ -115,8 +115,8 @@ out     = Kp_eff·e' + Ki·Σe' + Kd_axis·Δe' + vff·v_target
 
 | 参数 Parameter | 默认 Default | 说明 Description |
 |---|---|---|
-| Kp / Ki | 0.3 / 0.3 | 积分主导（"贴上就吸"的实战手感来源）<br>integral-dominant tuning, the source of the snap-on feel |
-| Kd（X）/ Kd（Y） | 0.01 / 0 | Y 轴微分默认关闭（垂直框边缘噪声会被 D 项放大）<br>Y-axis derivative off by default; vertical box-edge noise gets amplified by the D term |
+| Kp / Ki | 0.3 / 5.0 每秒 | Ki 按时间归一化，积分另设输出限幅（默认 30px），瞄准环频率从 60 到 300Hz 变化时手感保持一致<br>Ki normalized by time with a clamped integral output, so feel stays consistent from 60 to 300Hz loops |
+| Kd（X）/ Kd（Y） | 0 / 0 | 微分默认双轴关闭：高频检测抖动除以毫秒级 dt 会被放大成随机输出<br>both derivatives off by default; per-pixel detection noise divided by a millisecond dt becomes random output |
 | 死区 Deadband | 1.5 px | 消除锁定后的高频微颤；设 0.5px 即亚像素死区<br>kills the high-frequency tremor when locked; 0.5px gives a sub-pixel deadband |
 | 误差整形 Shaping | linear（可选 atan） | atan 软饱和：斜率 `atan_slope`、上限 `atan_ceiling`，甩枪平滑封顶无折角<br>atan soft saturation with slope `atan_slope` and cap `atan_ceiling`; flicks saturate smoothly |
 | 输出限速 Slew cap | 15 px/帧 | 输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板<br>the output is px/frame (speed itself); the per-axis cap forms the flick-speed ceiling |

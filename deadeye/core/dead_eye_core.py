@@ -21,6 +21,7 @@ class DeadEyeCore(ConfigurableMixin):
         cls.register_float('match_iou_threshold', 0.3, label='匹配 IoU 门控', min_value=0.05, max_value=0.95, step=0.05)
         cls.register_int('max_missed_frames', 5, label='漏检保留帧数', min_value=0, max_value=60, step=1)
         cls.register_int('min_hits_to_confirm', 1, label='确认命中帧数', min_value=1, max_value=10, step=1)
+        cls.register_bool('verbose', False, label='逐帧检测调试打印')
 
     def __init__(
         self,
@@ -141,8 +142,12 @@ class DeadEyeCore(ConfigurableMixin):
             self.target_updated.release()
 
             if self.verbose:
-                print(f'Detected {len(self.new_target_list)} targets, '
-                      f'time cost: {time.time() - t0}s.')
+                preview = '; '.join(f'{d[0]} {d[1]}-{d[2]}' for d in self.new_target_list[:6])
+                tracked = '; '.join(
+                    f'ID{t.index} {t.left_top}-{t.right_bottom}{"*" if t.missed_frames else ""}'
+                    for t in self.tracker.targets[:6])
+                print(f'[detect {time.time()-t0*1:.4f}s] {len(self.new_target_list)} dets: {preview}'
+                      f' | tracked: {tracked}')
             current_time = time.time()
             if current_time - self.fps_timer >= 1:
                 fps = self.fps_counter / (current_time - self.fps_timer)

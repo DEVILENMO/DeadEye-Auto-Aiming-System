@@ -161,10 +161,33 @@ def test_step_limit_zero_disables_cap():
 # ---------------------------------------------------------------- 默认参数
 
 def test_default_gains_match_tuned_preset():
-    """默认增益对齐实战调参组合：Kp≈Ki（积分主导）、Kd 极小、Y 轴微分关闭、限速 15px/帧。"""
+    """默认增益：Kp 维持、Ki 按时间归一化（每秒）、Kd 默认关、积分输出限幅、限速 15px/帧。"""
     defaults = {f.key: f.default for f in DeadEyeAutoAimingModule.get_config_spec()}
     assert defaults['k_p'] == pytest.approx(0.3)
-    assert defaults['k_i'] == pytest.approx(0.3)
-    assert defaults['k_d'] == pytest.approx(0.01)
+    assert defaults['k_i'] == pytest.approx(5.0)
+    assert defaults['k_d'] == pytest.approx(0.0)
     assert defaults['k_d_y'] == pytest.approx(0.0)
+    assert defaults['max_integral_output'] == pytest.approx(30.0)
     assert defaults['max_step_per_frame'] == pytest.approx(15.0)
+
+
+def test_integral_normalized_by_time_not_frame_count():
+    """积分按 Σe·dt 归一化：同样误差持续 dt 秒，I = Ki·e·dt，与帧数无关。"""
+    import time as _time
+    mod = make_module(k_i=2.0)
+    mod.calculate_mouse_movement_by_pid((110, 100), (100, 100))       # 首帧建立历史
+    mod.previous_time = _time.time() - 0.2                             # dt = 0.2s（低于 0.5s 过期保护）
+    x_r, _ = mod.calculate_mouse_movement_by_pid((110, 100), (100, 100))
+    # I = 2.0 * (10*0.2) = 4，P = 0.5*10 = 5，D=0 -> 总 9
+    assert x_r == pytest.approx(0.5 * 10 + 2.0 * 10 * 0.2)
+
+
+def test_integral_output_clamped():
+    """积分输出限幅：长时间同号误差下 I 项封顶，不再无界增长。"""
+    import time as _time
+    mod = make_module(k_i=100.0, max_integral_output=30.0)
+    mod.calculate_mouse_movement_by_pid((500, 100), (100, 100))
+    for _ in range(5):  # 累计 5×0.2s 的 400px 误差 -> 未限幅将达 100*400 = 40000
+        mod.previous_time = _time.time() - 0.2
+        mod.calculate_mouse_movement_by_pid((500, 100), (100, 100))
+    assert mod.last_pid_debug['i'][0] == pytest.approx(30.0)

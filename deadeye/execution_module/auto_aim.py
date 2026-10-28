@@ -6,6 +6,7 @@ import time
 import pyautogui
 from pynput import mouse
 
+from deadeye import paths
 from deadeye.base.modules import ExecutionModule, MouseControlModule, Target
 from deadeye.base.configurable import ConfigurableMixin
 
@@ -23,10 +24,11 @@ class SimpleMouseController(MouseControlModule):
 
 
 DEFAULT_P = 0.3
-DEFEULT_I = 0.3
-DEFAULT_D = 0.01
+DEFEULT_I = 5.0
+DEFAULT_D = 0.0
 DEFAULT_R = 0.5
 DEFAULT_MAX_STEP = 15.0
+DEFAULT_I_CLAMP = 30.0
 
 
 class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
@@ -54,9 +56,11 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_int('max_movement', 320, label='最大移动', min_value=1, max_value=5000, step=1)
         cls.register_float('max_step_per_frame', DEFAULT_MAX_STEP, label='输出限速(px/帧)', min_value=0.0, max_value=200.0, step=1.0)
         cls.register_float('k_p', DEFAULT_P, label='PID Kp', min_value=0.0, max_value=10.0, step=0.01)
-        cls.register_float('k_i', DEFEULT_I, label='PID Ki', min_value=0.0, max_value=10.0, step=0.01)
+        cls.register_float('k_i', DEFEULT_I, label='PID Ki(每秒)', min_value=0.0, max_value=100.0, step=0.1)
         cls.register_float('k_d', DEFAULT_D, label='PID Kd(X轴)', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('k_d_y', 0.0, label='PID Kd(Y轴,默认关)', min_value=0.0, max_value=10.0, step=0.01)
+        cls.register_float('max_integral_output', DEFAULT_I_CLAMP, label='积分输出限幅(px)', min_value=0.0, max_value=500.0, step=1.0)
+        cls.register_bool('debug_log', False, label='逐帧调试日志(输出/aim_debug.csv)')
         cls.register_float('deadzone_x', 1.5, label='死区 X(px)', min_value=0.0, max_value=50.0, step=0.5)
         cls.register_float('deadzone_y', 1.5, label='死区 Y(px)', min_value=0.0, max_value=50.0, step=0.5)
         cls.register_choice('shaping', 'linear', label='误差整形', choices=['linear', 'atan'])
@@ -82,6 +86,8 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         k_i: float = DEFEULT_I,
         k_d: float = DEFAULT_D,
         k_d_y: float = 0.0,
+        max_integral_output: float = DEFAULT_I_CLAMP,
+        debug_log: bool = False,
         deadzone_x: float = 1.5,
         deadzone_y: float = 1.5,
         shaping: str = 'linear',
@@ -108,6 +114,10 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.max_movement = int(max_movement)
         # 输出限速：输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板（0=关闭）
         self.max_step_per_frame = float(max_step_per_frame)
+        self.max_integral_output = float(max_integral_output)
+        self.debug_log = bool(debug_log)
+        self._debug_rows: list[list] = []
+        self.last_pid_debug: dict = {}
         self.k_p = float(k_p)
         self.k_i = float(k_i)
         self.k_d = float(k_d)
@@ -207,7 +217,32 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         y_r = int(y_r * self.aim_sensitive)
 
         self.mouse_controller.move_mouse(x_r, y_r)
+        if self.debug_log:
+            dbg = self.last_pid_debug
+            self._debug_rows.append([
+                f'{time.time():.4f}', f'{dbg["dt"]*1000:.2f}',
+                str(aim_target.index),
+                f'{position_fixed[0]},{position_fixed[1]}', f'{rel_mouse_x},{rel_mouse_y}',
+                f'{dbg["e_raw"][0]:.1f},{dbg["e_raw"][1]:.1f}',
+                f'{dbg["e_shaped"][0]:.1f},{dbg["e_shaped"][1]:.1f}',
+                f'{dbg["p"][0]:.1f},{dbg["p"][1]:.1f}',
+                f'{dbg["i"][0]:.1f},{dbg["i"][1]:.1f}',
+                f'{dbg["d"][0]:.1f},{dbg["d"][1]:.1f}',
+                f'{dbg["ff"][0]:.1f},{dbg["ff"][1]:.1f}',
+                f'{x_r:.1f},{y_r:.1f}',
+            ])
         return x_r, y_r
+
+    def on_exit(self):
+        if self._debug_rows:
+            csv_path = paths.output_path('aim_debug.csv')
+            header = ('t,dt_ms,target_id,target_center,mouse,'
+                      'e_raw,e_shaped,p,i,d,ff,out')
+            with open(csv_path, 'w', encoding='utf-8') as f:
+                f.write(header + '\n')
+                f.write('\n'.join(','.join(r) for r in self._debug_rows) + '\n')
+            print(f'瞄准调试日志: {csv_path}（{len(self._debug_rows)} 帧）')
+        self._debug_rows.clear()
 
     @staticmethod
     def find_closest_target(target_list: list[Target], mouse_pos_x: int, mouse_pos_y: int) -> Target:
@@ -284,20 +319,20 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         x_p = kp_x * distance_x
         y_p = kp_y * distance_y
 
+        d_time_used = 0.0
         if self.previous_time is not None:
-            d_time = current_time - self.previous_time
-            self.x_integral_value = self.x_integral_value + distance_x
-            x_i = self.k_i * self.x_integral_value
-            self.y_integral_value = self.y_integral_value + distance_y
-            y_i = self.k_i * self.y_integral_value
+            d_time = max(current_time - self.previous_time, 1e-4)
+            # 积分按时间归一化（Σe·dt）：控制特性不随瞄准环频率（60~300Hz）漂移；
+            # 旧版按帧累加，在 300Hz 截屏下等效积分增益放大 5 倍，是瞄准抖动的主因
+            self.x_integral_value = self.x_integral_value + distance_x * d_time
+            self.y_integral_value = self.y_integral_value + distance_y * d_time
+            x_i = self._clamp(self.k_i * self.x_integral_value, self.max_integral_output)
+            y_i = self._clamp(self.k_i * self.y_integral_value, self.max_integral_output)
 
-            if d_time != 0:
-                x_d = self.k_d * (distance_x - self.previous_distance_x) / d_time
-                # Y 轴微分独立（默认 0）：垂直框边缘抖动大，D 项易成噪声放大器
-                y_d = self.k_d_y * (distance_y - self.previous_distance_y) / d_time
-            else:
-                x_d = 0
-                y_d = 0
+            x_d = self.k_d * (distance_x - self.previous_distance_x) / d_time
+            # Y 轴微分独立（默认 0）：垂直框边缘抖动大，D 项易成噪声放大器
+            y_d = self.k_d_y * (distance_y - self.previous_distance_y) / d_time
+            d_time_used = d_time
         else:
             x_i = 0
             y_i = 0
@@ -327,4 +362,16 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.previous_time = current_time
         self.previous_distance_x = distance_x
         self.previous_distance_y = distance_y
+        self.last_pid_debug = {
+            'e_raw': (target_position[0] - mouse_position[0], target_position[1] - mouse_position[1]),
+            'e_shaped': (distance_x, distance_y),
+            'p': (x_p, y_p), 'i': (x_i, y_i), 'd': (x_d, y_d), 'ff': (x_ff, y_ff),
+            'out': (x_r, y_r), 'dt': d_time_used,
+        }
         return x_r, y_r
+
+    @staticmethod
+    def _clamp(value: float, limit: float) -> float:
+        if limit <= 0:
+            return value
+        return max(-limit, min(limit, value))
