@@ -29,6 +29,7 @@ DEFAULT_D = 0.0
 DEFAULT_R = 0.5
 DEFAULT_MAX_STEP = 15.0
 DEFAULT_I_CLAMP = 30.0
+DEFAULT_SMOOTH = 0.6
 
 
 class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
@@ -60,6 +61,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_float('k_d', DEFAULT_D, label='PID Kd(X轴)', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('k_d_y', 0.0, label='PID Kd(Y轴,默认关)', min_value=0.0, max_value=10.0, step=0.01)
         cls.register_float('max_integral_output', DEFAULT_I_CLAMP, label='积分输出限幅(px)', min_value=0.0, max_value=500.0, step=1.0)
+        cls.register_float('output_smoothing', DEFAULT_SMOOTH, label='输出平滑(0=关)', min_value=0.0, max_value=0.95, step=0.05)
         cls.register_bool('debug_log', False, label='逐帧调试日志(输出/aim_debug.csv)')
         cls.register_float('deadzone_x', 1.5, label='死区 X(px)', min_value=0.0, max_value=50.0, step=0.5)
         cls.register_float('deadzone_y', 1.5, label='死区 Y(px)', min_value=0.0, max_value=50.0, step=0.5)
@@ -87,6 +89,7 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         k_d: float = DEFAULT_D,
         k_d_y: float = 0.0,
         max_integral_output: float = DEFAULT_I_CLAMP,
+        output_smoothing: float = DEFAULT_SMOOTH,
         debug_log: bool = False,
         deadzone_x: float = 1.5,
         deadzone_y: float = 1.5,
@@ -115,6 +118,11 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         # 输出限速：输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板（0=关闭）
         self.max_step_per_frame = float(max_step_per_frame)
         self.max_integral_output = float(max_integral_output)
+        # 输出端 EMA：y = (1-s)·new + s·prev。高频瞄准环下 ±1px 的随机输出
+        # 经平滑后符号交替项互相抵消，是消除"锁死在球心附近微颤"的最后一级
+        self.output_smoothing = min(0.95, max(0.0, float(output_smoothing)))
+        self._smoothed_x = None
+        self._smoothed_y = None
         self.debug_log = bool(debug_log)
         self._debug_rows: list[list] = []
         self.last_pid_debug: dict = {}
@@ -273,6 +281,8 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         self.y_integral_value = 0
         self.previous_distance_x = 0
         self.previous_distance_y = 0
+        self._smoothed_x = None
+        self._smoothed_y = None
 
     def _shape_error(self, error: float, deadzone: float) -> float:
         """
@@ -358,6 +368,16 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
                 x_r = x_r / abs(x_r) * cap
             if abs(y_r) > cap:
                 y_r = y_r / abs(y_r) * cap
+
+        # 输出端 EMA 平滑：s=0 关闭；换目标/丢目标时状态随 PID 历史一起重置
+        if self.output_smoothing > 0.0:
+            s = self.output_smoothing
+            if self._smoothed_x is None:
+                self._smoothed_x, self._smoothed_y = x_r, y_r
+            else:
+                self._smoothed_x = (1.0 - s) * x_r + s * self._smoothed_x
+                self._smoothed_y = (1.0 - s) * y_r + s * self._smoothed_y
+            x_r, y_r = self._smoothed_x, self._smoothed_y
 
         self.previous_time = current_time
         self.previous_distance_x = distance_x

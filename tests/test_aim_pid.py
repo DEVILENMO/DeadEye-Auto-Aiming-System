@@ -1,6 +1,7 @@
 # coding: utf-8
 """DeadEyeAutoAimingModule PID 控制律测试（死区 / Y轴微分独立 / 增益调度 / 速度前馈）。"""
 import pytest
+import numpy as np
 
 from deadeye.execution_module.auto_aim import DeadEyeAutoAimingModule
 
@@ -15,6 +16,7 @@ def make_module(**overrides):
         velocity_gain_schedule=0.0,
         velocity_feedforward_x=0.0, velocity_feedforward_y=0.0,
         rebound_strength=0.0, max_movement=100000, max_step_per_frame=0.0,
+        output_smoothing=0.0,
     )
     params.update(overrides)
     return DeadEyeAutoAimingModule(VIEW, enable_auto_aim=False, enable_auto_shoot=False, **params)
@@ -191,3 +193,50 @@ def test_integral_output_clamped():
         mod.previous_time = _time.time() - 0.2
         mod.calculate_mouse_movement_by_pid((500, 100), (100, 100))
     assert mod.last_pid_debug['i'][0] == pytest.approx(30.0)
+
+
+# ---------------------------------------------------------------- 输出平滑
+
+def test_output_smoothing_damps_alternating_jitter():
+    """交替 ±e 的噪声经 EMA 后幅度大幅衰减：稳态幅度 = e·(1-s)/s。"""
+    mod = make_module(output_smoothing=0.75)
+    outs = []
+    for sign in (1, -1) * 12:
+        x_r, _ = mod.calculate_mouse_movement_by_pid((100 + sign * 10, 100), (100, 100))
+        outs.append(x_r)
+    # 稳态振幅 = 10*(1-0.75)/0.75 ≈ 3.3（未平滑为 5），且相邻帧差远小于未平滑
+    assert abs(outs[-1]) < 5.0
+    diffs = np.abs(np.diff(outs))
+    assert diffs.max() < 5.0
+
+
+def test_output_smoothing_preserves_constant_tracking():
+    """恒定误差下 EMA 输出与无平滑完全一致：平滑只衰减变化，不拖慢稳定跟踪。"""
+    smooth = make_module(output_smoothing=0.6)
+    raw = make_module(output_smoothing=0.0)
+    for _ in range(10):
+        s = smooth.calculate_mouse_movement_by_pid((160, 100), (100, 100))[0]
+        r = raw.calculate_mouse_movement_by_pid((160, 100), (100, 100))[0]
+        assert s == pytest.approx(r)  # 恒 30：EMA 对常值透明
+
+
+def test_output_smoothing_damps_step_transition():
+    """误差突降时过渡被阻尼：平滑版逐帧渐变，无平滑立即跳变。"""
+    smooth = make_module(output_smoothing=0.6)
+    raw = make_module(output_smoothing=0.0)
+    s_vals, r_vals = [], []
+    for e in (60, 60, 10, 10, 10):
+        s_vals.append(smooth.calculate_mouse_movement_by_pid((100 + e, 100), (100, 100))[0])
+        r_vals.append(raw.calculate_mouse_movement_by_pid((100 + e, 100), (100, 100))[0])
+    assert r_vals[2] == pytest.approx(5.0)          # 无平滑立即跳到 0.5*10
+    assert s_vals[2] == pytest.approx(0.4 * 5 + 0.6 * 30)  # 平滑版渐变 = 20
+    assert 5.0 < s_vals[2] < 30.0
+
+
+def test_output_smoothing_resets_on_target_change():
+    mod = make_module(output_smoothing=0.9)
+    mod.calculate_mouse_movement_by_pid((200, 100), (100, 100))
+    mod.clear_pid_history()
+    assert mod._smoothed_x is None  # 换目标后平滑状态清零，不携带旧速度
+    x_r, _ = mod.calculate_mouse_movement_by_pid((110, 100), (100, 100))
+    assert x_r == pytest.approx(0.5 * 10)
