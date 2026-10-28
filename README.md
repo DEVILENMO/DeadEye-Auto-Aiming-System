@@ -120,6 +120,7 @@ out     = Kp_eff·e' + Ki·Σe' + Kd_axis·Δe' + vff·v_target
 | 死区 Deadband | 1.5 px | 消除锁定后的高频微颤；设 0.5px 即亚像素死区<br>kills the high-frequency tremor when locked; 0.5px gives a sub-pixel deadband |
 | 误差整形 Shaping | linear（可选 atan） | atan 软饱和：斜率 `atan_slope`、上限 `atan_ceiling`，甩枪平滑封顶无折角<br>atan soft saturation with slope `atan_slope` and cap `atan_ceiling`; flicks saturate smoothly |
 | 输出限速 Slew cap | 15 px/帧 | 输出即 px/帧（速度本身），按轴限幅构成甩枪速度天花板<br>the output is px/frame (speed itself); the per-axis cap forms the flick-speed ceiling |
+| 输出平滑 Smoothing | 0.6 | 输出端 EMA：恒定跟踪全透传，只衰减 ±1px 级的符号交替噪声，消除锁定后的微颤（0 关闭）<br>output-side EMA: transparent for constant tracking, attenuates alternating +-1px noise that causes lock jitter (0 disables) |
 | 速度前馈 / 增益调度 Feed-forward / scheduling | 0 / 0 | KF 速度补偿运动相位滞后；Kp 随目标速度连续放大（无切换抖振）<br>Kalman velocity compensates motion phase lag; Kp scales continuously with target speed |
 
 Unified `update_targets(frame, target_list)` interface; ships the aim assist (`DeadEyeAutoAimingModule`) and the annotated-video writer (`VideoWriterOutput`, default `output/annotated.mp4`).
