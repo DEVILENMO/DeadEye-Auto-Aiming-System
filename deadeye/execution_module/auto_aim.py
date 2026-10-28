@@ -30,6 +30,7 @@ DEFAULT_R = 0.5
 DEFAULT_MAX_STEP = 15.0
 DEFAULT_I_CLAMP = 30.0
 DEFAULT_SMOOTH = 0.6
+DEFAULT_DEADZONE = 0.5
 
 
 class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
@@ -63,9 +64,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         cls.register_float('max_integral_output', DEFAULT_I_CLAMP, label='积分输出限幅(px)', min_value=0.0, max_value=500.0, step=1.0)
         cls.register_float('output_smoothing', DEFAULT_SMOOTH, label='输出平滑(0=关)', min_value=0.0, max_value=0.95, step=0.05)
         cls.register_bool('debug_log', False, label='逐帧调试日志(输出/aim_debug.csv)')
-        cls.register_float('deadzone_x', 1.5, label='死区 X(px,下限)', min_value=0.0, max_value=50.0, step=0.5)
-        cls.register_float('deadzone_y', 1.5, label='死区 Y(px,下限)', min_value=0.0, max_value=50.0, step=0.5)
-        cls.register_float('deadzone_box_ratio', 0.10, label='死区随框比例', min_value=0.0, max_value=0.5, step=0.01)
+        cls.register_float('deadzone_x', DEFAULT_DEADZONE, label='死区 X(px,下限)', min_value=0.0, max_value=50.0, step=0.1)
+        cls.register_float('deadzone_y', DEFAULT_DEADZONE, label='死区 Y(px,下限)', min_value=0.0, max_value=50.0, step=0.1)
+        cls.register_float('deadzone_box_ratio', 0.0, label='死区随框比例(默认关)', min_value=0.0, max_value=0.5, step=0.01)
         cls.register_choice('shaping', 'linear', label='误差整形', choices=['linear', 'atan'])
         cls.register_float('atan_slope', 1.0, label='atan 整形斜率', min_value=0.1, max_value=5.0, step=0.1)
         cls.register_float('atan_ceiling', 300.0, label='atan 整形上限(px)', min_value=10.0, max_value=1000.0, step=10.0)
@@ -92,9 +93,9 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
         max_integral_output: float = DEFAULT_I_CLAMP,
         output_smoothing: float = DEFAULT_SMOOTH,
         debug_log: bool = False,
-        deadzone_x: float = 1.5,
-        deadzone_y: float = 1.5,
-        deadzone_box_ratio: float = 0.10,
+        deadzone_x: float = DEFAULT_DEADZONE,
+        deadzone_y: float = DEFAULT_DEADZONE,
+        deadzone_box_ratio: float = 0.0,
         shaping: str = 'linear',
         atan_slope: float = 1.0,
         atan_ceiling: float = 300.0,
@@ -295,22 +296,23 @@ class DeadEyeAutoAimingModule(ExecutionModule, ConfigurableMixin):
 
     def _shape_error(self, error: float, deadzone: float) -> float:
         """
-        误差整形：死区内归零；linear 模式原样通过；atan 模式软饱和。
+        误差整形：削减式死区（|e|−dz，边界处连续过零，避免硬边界极限环）
+        叠加可选 atan 软饱和。
 
-        atan 模式：shaped(e) = B·atan(A·(2|e| − dz))·sign(e)
-        - 小误差 ≈ atan_slope·(e − dz·sign(e))（近似线性，斜率可控）
-        - 大误差平滑封顶于 atan_ceiling（无 clamp 折角）
+        linear: shaped(e) = sign(e)·max(0, |e| − dz)
+        atan:   shaped(e) = B·atan(A·2·(|e| − dz))·sign(e)
+        - 小误差近似线性（斜率 atan_slope），大误差平滑封顶于 atan_ceiling
         - 参数映射：B = 2C/π, A = slope·π/(4C)
         """
         magnitude = abs(error)
         if magnitude <= deadzone:
             return 0.0
-        effective = 2.0 * magnitude - deadzone
+        reduced = magnitude - deadzone
         if self.shaping != 'atan':
-            return error
+            return math.copysign(reduced, error)
         b = 2.0 * self.atan_ceiling / math.pi
         a = self.atan_slope * math.pi / (4.0 * self.atan_ceiling)
-        return math.copysign(b * math.atan(a * effective), error)
+        return math.copysign(b * math.atan(a * 2.0 * reduced), error)
 
     def calculate_mouse_movement_by_pid(self, target_position, mouse_position, target_velocity=None, *,
                                         deadzone_x=None, deadzone_y=None):

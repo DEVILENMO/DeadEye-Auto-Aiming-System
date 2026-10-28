@@ -31,9 +31,23 @@ def test_deadband_zeroes_small_error():
 
 
 def test_deadband_keeps_error_outside_band():
+    """削减式死区：死区外输出与超出部分成正比（边界连续，无踢）。"""
     mod = make_module(deadzone_x=5.0)
     x_r, y_r = mod.calculate_mouse_movement_by_pid((110, 100), (100, 100))
-    assert x_r == pytest.approx(0.5 * 10)
+    assert x_r == pytest.approx(0.5 * 5)  # 10px 误差、死区 5 -> 有效 5
+
+
+def test_deadband_boundary_is_continuous():
+    """边界两侧无跳变：越界 1px 的输出远小于死区宽度本身（对比硬边界会全额踢出）。"""
+    mod = make_module(deadzone_x=20.0)
+    x_in, _ = mod.calculate_mouse_movement_by_pid((120, 100), (100, 100))   # 误差 = 死区
+    mod.clear_pid_history()
+    x_out1, _ = mod.calculate_mouse_movement_by_pid((121, 100), (100, 100))  # 越界 1px
+    mod.clear_pid_history()
+    x_out2, _ = mod.calculate_mouse_movement_by_pid((122, 100), (100, 100))  # 越界 2px
+    assert x_in == 0
+    assert x_out1 == pytest.approx(0.5 * 1)
+    assert x_out2 == pytest.approx(0.5 * 2)
 
 
 def test_deadband_also_gates_integral_and_derivative():
@@ -43,8 +57,8 @@ def test_deadband_also_gates_integral_and_derivative():
     mod.previous_time = None
     mod.calculate_mouse_movement_by_pid((4, 0), (0, 0))     # 仍死区内
     mod.previous_time = None
-    x_r, _ = mod.calculate_mouse_movement_by_pid((6, 0), (0, 0))  # 出死区
-    assert x_r == pytest.approx(0.5 * 6)  # 只有 P：没有历史积分/微分量
+    x_r, _ = mod.calculate_mouse_movement_by_pid((6, 0), (0, 0))  # 出死区 1px
+    assert x_r == pytest.approx(0.5 * 1)  # 只有 P：没有历史积分/微分量
 
 
 # ---------------------------------------------------------------- Y 轴微分独立
@@ -169,6 +183,9 @@ def test_default_gains_match_tuned_preset():
     assert defaults['k_i'] == pytest.approx(5.0)
     assert defaults['k_d'] == pytest.approx(0.0)
     assert defaults['k_d_y'] == pytest.approx(0.0)
+    assert defaults['deadzone_x'] == pytest.approx(0.5)
+    assert defaults['deadzone_y'] == pytest.approx(0.5)
+    assert defaults['deadzone_box_ratio'] == pytest.approx(0.0)
     assert defaults['max_integral_output'] == pytest.approx(30.0)
     assert defaults['max_step_per_frame'] == pytest.approx(15.0)
 
@@ -206,6 +223,7 @@ def test_proportional_deadband_scales_with_box(monkeypatch):
     mod = DeadEyeAutoAimingModule(
         (640, 640), enable_auto_aim=True, enable_auto_shoot=False,
         k_p=0.5, output_smoothing=0.0, max_movement=100000, max_step_per_frame=0,
+        deadzone_x=1.5, deadzone_y=1.5, deadzone_box_ratio=0.03,
         auto_aim_range_x=10.0, auto_aim_range_y=10.0,
     )
     mod.view_range_start = (0, 0)  # mock 鼠标坐标即视口坐标
@@ -215,7 +233,7 @@ def test_proportional_deadband_scales_with_box(monkeypatch):
     x_r, _ = mod.auto_aim([target])
     # 误差 200px，超出死区 6px，输出 = P(0.5*200) + I
     assert abs(x_r) > 50
-    assert mod.last_pid_debug['e_shaped'][0] == pytest.approx(200.0)
+    assert mod.last_pid_debug['e_shaped'][0] == pytest.approx(194.0)
 
 
 def test_proportional_deadband_silences_small_offset_on_big_box(monkeypatch):
