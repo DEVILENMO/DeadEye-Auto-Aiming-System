@@ -4,7 +4,43 @@ import cv2
 import numpy as np
 import pytest
 
-from deadeye.detection_module.aimlab_color_detector import AimLabColorDetector
+from deadeye.detection_module.aimlab_color_detector import (
+    AimLabColorDetector,
+    _parse_hex_color,
+    _rgb_hue,
+)
+
+
+def test_hex_calibration_matches_aimlab_defaults():
+    """AimLab 默认目标色 #00FFFF / #EDC709 应解析到正确色相中心。"""
+    assert _rgb_hue((0, 255, 255)) == 90    # #00FFFF
+    assert _rgb_hue((237, 199, 9)) == 25    # #EDC709
+    det = AimLabColorDetector()
+    assert det.cyan_hue == 90
+    assert det.yellow_hue == 25
+
+
+def test_invalid_hex_falls_back():
+    assert _parse_hex_color('zzzzzz', '#00FFFF') == (0, 255, 255)
+    assert _parse_hex_color('#12', '#EDC709') == (237, 199, 9)
+
+
+def test_custom_color_tracks_that_color():
+    """用户改了 AimLab 目标色（如红色），hex 跟改后应检新颜色。"""
+    img = np.full((200, 200, 3), 128, np.uint8)
+    cv2.circle(img, (100, 100), 40, (255, 40, 40), -1)  # RGB 红
+    default_det = AimLabColorDetector(detect_yellow=False)
+    assert len(default_det.target_detect(img)) == 0
+    red_det = AimLabColorDetector(cyan_color='#FF2828', detect_yellow=False)
+    assert len(red_det.target_detect(img)) == 1
+
+
+def test_hue_wrapping():
+    """紫红/品红等跨 0 色相的颜色应正常检测（区间环绕）。"""
+    img = np.full((200, 200, 3), 128, np.uint8)
+    cv2.circle(img, (100, 100), 40, (255, 0, 200), -1)  # RGB 品红 H≈146
+    det = AimLabColorDetector(cyan_color='#FF00C8', detect_yellow=False)
+    assert len(det.target_detect(img)) == 1
 
 
 def make_scene(*circles, size=(320, 320)):
