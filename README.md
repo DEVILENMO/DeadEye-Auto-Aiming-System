@@ -156,13 +156,15 @@ No system-level CUDA setup needed on Windows: `cuda_env.py` auto-registers CUDA 
 
 ### 效果演示 / Demonstration
 
-经典演示（历史版本）：[![辅助瞄准效果演示 / Aiming Assist Effect Demonstration](./res/effect_test.gif)](./res/effect_test.gif)
+**Overwatch 演示**
 
-AimLab 实测（颜色检测 + 追踪 + 辅助瞄准，完整视频 [aimlab_demo.mp4](./res/aimlab_demo.mp4)，18s / 2560×1440 / 60fps）：
+[![Overwatch 演示 / Overwatch demo](./res/effect_test.gif)](./res/effect_test.gif)
 
-[![AimLab 实测演示 / AimLab live demo](./res/aimlab_demo_preview.gif)](./res/aimlab_demo.mp4)
+**AimLab 演示**（完整视频 [aimlab_demo.mp4](./res/aimlab_demo.mp4)）
 
-带标注的示例输出见 `output/annotated.mp4`（检测 + 追踪 ID + 画框的全流水线产物）。See `output/annotated.mp4` for a sample annotated output of the full pipeline.
+[![AimLab 演示 / AimLab demo](./res/aimlab_demo_preview.gif)](./res/aimlab_demo.mp4)
+
+带标注的示例输出：`output/annotated.mp4` / Sample annotated output: `output/annotated.mp4`
 
 ## 常见问题 / FAQ
 
